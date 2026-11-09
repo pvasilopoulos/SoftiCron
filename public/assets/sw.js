@@ -31,6 +31,3 @@ self.addEventListener('notificationclick', (event) => {
     return self.clients.openWindow(url);
   })());
 });
-
-// Network passthrough (keeps the app installable; no offline cache of private data).
-self.addEventListener('fetch', () => {});
