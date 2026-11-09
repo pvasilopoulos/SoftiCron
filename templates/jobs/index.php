@@ -5,6 +5,7 @@ use App\Services\CronHelper;
 
 $tz = Auth::tenant()['timezone'];
 $canManage = Auth::can('jobs.manage');
+$canRun = Auth::can('jobs.run');
 $filters = ['all' => ['Όλα', $counts['all_count']], 'active' => ['Ενεργά', $counts['active']], 'issue' => ['Με πρόβλημα', $counts['issue']], 'paused' => ['Σε παύση', $counts['paused']]];
 ?>
 <div class="page-head" data-autorefresh="60">
@@ -38,14 +39,14 @@ $filters = ['all' => ['Όλα', $counts['all_count']], 'active' => ['Ενεργ�
   <?php else: ?>
     <div class="table-wrap">
       <table class="table rtable">
-        <thead><tr><th>Job</th><th>Πρόγραμμα</th><th>Τελευταία εκτέλεση</th><th>Επόμενη</th><th class="num">Ενεργό</th></tr></thead>
+        <thead><tr><th>Job</th><th>Πρόγραμμα</th><th>Τελευταία εκτέλεση</th><th>Επόμενη</th><th class="num">Ενεργό</th><th class="num"><span class="sr-only">Ενέργειες</span></th></tr></thead>
         <tbody>
         <?php foreach ($page['rows'] as $j): ?>
           <tr>
             <td class="primary">
               <div class="stack-sm" style="gap:4px;min-width:0">
                 <a class="strong" href="<?= e(url('jobs/' . $j['id'] . '/edit')) ?>"><?= e($j['name']) ?></a>
-                <div class="row" style="gap:8px;flex-wrap:nowrap;min-width:0"><span class="pill"><?= e($j['method']) ?></span><span class="mono xs muted" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:360px"><?= e($j['url']) ?></span></div>
+                <div class="row" style="gap:8px;flex-wrap:nowrap;min-width:0"><span class="pill"><?= e($j['method']) ?></span><span class="mono xs muted" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:260px"><?= e($j['url']) ?></span></div>
               </div>
             </td>
             <td data-label="Πρόγραμμα" class="small"><?= e(CronHelper::describe($j['cron_expr'])) ?></td>
@@ -63,6 +64,24 @@ $filters = ['all' => ['Όλα', $counts['all_count']], 'active' => ['Ενεργ�
               <?php else: ?>
                 <?= $j['enabled'] ? 'Ναι' : 'Όχι' ?>
               <?php endif; ?>
+            </td>
+            <td class="num" data-label="Ενέργειες">
+              <div class="row" style="gap:6px;flex-wrap:nowrap;justify-content:flex-end">
+                <?php if ($canRun): ?>
+                  <form method="post" action="<?= e(url('jobs/' . $j['id'] . '/run')) ?>" class="inline" data-loading>
+                    <?= csrf_field() ?>
+                    <input type="hidden" name="from" value="list">
+                    <button class="btn btn-sm" type="submit" title="Εκτέλεση τώρα" aria-label="<?= e('Εκτέλεση τώρα: ' . $j['name']) ?>"><?= icon('play', 14) ?><span>Εκτέλεση</span></button>
+                  </form>
+                <?php endif; ?>
+                <a class="btn btn-sm btn-icon" href="<?= e(url('jobs/' . $j['id'] . '/edit')) ?>" title="<?= $canManage ? 'Επεξεργασία' : 'Προβολή' ?>" aria-label="<?= e(($canManage ? 'Επεξεργασία: ' : 'Προβολή: ') . $j['name']) ?>" style="width:34px"><?= icon('edit', 14) ?></a>
+                <?php if ($canManage): ?>
+                  <form method="post" action="<?= e(url('jobs/' . $j['id'] . '/delete')) ?>" class="inline" data-confirm="<?= e('Να διαγραφεί οριστικά το job «' . $j['name'] . '» μαζί με το ιστορικό εκτελέσεών του;') ?>">
+                    <?= csrf_field() ?>
+                    <button class="btn btn-sm btn-icon btn-danger" type="submit" title="Διαγραφή" aria-label="<?= e('Διαγραφή: ' . $j['name']) ?>" style="width:34px"><?= icon('trash', 14) ?></button>
+                  </form>
+                <?php endif; ?>
+              </div>
             </td>
           </tr>
         <?php endforeach; ?>

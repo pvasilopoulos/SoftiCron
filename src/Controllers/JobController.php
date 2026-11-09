@@ -453,9 +453,16 @@ final class JobController extends Controller
         if (!$overlapBusy && $scheduler->claim($runId)) {
             $scheduler->executeClaimed([$runId]);
         }
-        $run = $this->db->one('SELECT status FROM job_runs WHERE id = ?', [$runId]);
+        $run = $this->db->one('SELECT status, http_status, duration_ms, error FROM job_runs WHERE id = ?', [$runId]);
         $label = RUN_STATUS[$run['status'] ?? 'queued'][0] ?? '';
-        $this->flash($run['status'] === 'failed' ? 'error' : 'success', 'Η εκτέλεση ολοκληρώθηκε: ' . $label . '.');
+        $failed = in_array($run['status'], ['failed', 'retrying'], true);
+        if ($this->req->input('from') === 'list') {
+            $details = $run['http_status'] ? ' · HTTP ' . $run['http_status'] . ' · ' . fmt_ms($run['duration_ms'] !== null ? (int) $run['duration_ms'] : null) : '';
+            $msg = '«' . $job['name'] . '»: ' . $label . $details . ($failed && $run['error'] ? ' — ' . $run['error'] : '') . ' (εκτέλεση #' . $runId . ')';
+            $this->flash($failed ? 'error' : 'success', $msg);
+            return $this->redirect('jobs' . (($q = parse_url($_SERVER['HTTP_REFERER'] ?? '', PHP_URL_QUERY)) ? '?' . $q : ''));
+        }
+        $this->flash($failed ? 'error' : 'success', 'Η εκτέλεση ολοκληρώθηκε: ' . $label . '.');
         return $this->redirect("runs/$runId");
     }
 
