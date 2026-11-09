@@ -95,6 +95,23 @@ final class SettingsController extends Controller
         return $this->redirect('settings');
     }
 
+    /** Mobile footer menu items (tenant-wide). */
+    public function menu(): Response
+    {
+        $this->authorize('settings.manage');
+        $tid = $this->tenantId();
+        $before = \App\Services\BottomNav::configured($tid);
+        $keys = \App\Services\BottomNav::clean((array) ($_POST['slots'] ?? []));
+        if (!$keys) {
+            $this->flash('error', 'Διάλεξε τουλάχιστον ένα κουμπί για το μενού.');
+            return $this->redirect('settings#footer-menu');
+        }
+        Settings::set($tid, 'ui.bottom_nav', implode(',', $keys));
+        Audit::log('settings.updated', 'tenant', $tid, 'Μενού κινητού', ['footer' => $before], ['footer' => $keys]);
+        $this->flash('success', 'Το μενού κινητού αποθηκεύτηκε.');
+        return $this->redirect('settings#footer-menu');
+    }
+
     /** Public: logos are shown in emails and on the login screen of invitations. */
     public function logo(int $id): Response
     {

@@ -87,6 +87,7 @@ return static function (RouteCollector $r): void {
     $r->get('/settings', [C\SettingsController::class, 'index']);
     $r->post('/settings', [C\SettingsController::class, 'update']);
     $r->post('/settings/branding', [C\SettingsController::class, 'branding']);
+    $r->post('/settings/menu', [C\SettingsController::class, 'menu']);
     $r->get('/branding/{id:\d+}/logo', [C\SettingsController::class, 'logo']);
     $r->get('/profile', [C\ProfileController::class, 'index']);
     $r->post('/profile', [C\ProfileController::class, 'update']);

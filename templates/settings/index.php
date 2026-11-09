@@ -63,8 +63,62 @@ $logoUrl = $tenant['logo_path'] ? url('branding/' . $tenant['id'] . '/logo') . '
     <div class="form-actions"><button class="btn btn-primary" type="submit">Αποθήκευση branding</button></div>
   </form>
 </div>
+<?php
+$footer = App\Services\BottomNav::configured((int) $tenant['id']);
+$items = App\Services\BottomNav::ITEMS;
+?>
+<form id="footer-menu" method="post" action="<?= e(url('settings/menu')) ?>" class="card stack">
+  <?= csrf_field() ?>
+  <div>
+    <h2>Μενού κινητού (footer)</h2>
+    <p class="small muted" style="margin-top:4px">Τα κουμπιά της κάτω μπάρας στο κινητό, για όλους τους χρήστες του οργανισμού. Το «Μενού» μένει πάντα τελευταίο και ανοίγει όλες τις σελίδες. Όποιος δεν έχει δικαίωμα για μια σελίδα δεν βλέπει το κουμπί της.</p>
+  </div>
+  <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr))">
+    <?php for ($i = 0; $i < App\Services\BottomNav::SLOTS; $i++): ?>
+      <label class="field">Θέση <?= $i + 1 ?>
+        <select class="select" name="slots[]" data-footer-slot>
+          <option value="">— Κενή —</option>
+          <?php foreach ($items as $k => [$label]): ?>
+            <option value="<?= e($k) ?>" data-icon="<?= e($items[$k][2]) ?>" <?= ($footer[$i] ?? '') === $k ? 'selected' : '' ?>><?= e($label) ?></option>
+          <?php endforeach; ?>
+        </select>
+      </label>
+    <?php endfor; ?>
+  </div>
+  <div class="stack-sm">
+    <span class="small" style="font-weight:500;color:var(--text-2)">Προεπισκόπηση</span>
+    <div data-footer-preview style="display:flex;justify-content:space-around;max-width:420px;padding:8px 6px;border:1px solid var(--border);border-radius:14px;background:var(--surface)"></div>
+  </div>
+  <div class="form-actions">
+    <button class="btn" type="button" data-footer-reset>Προεπιλογή</button>
+    <button class="btn btn-primary" type="submit">Αποθήκευση μενού</button>
+  </div>
+  <template data-footer-icons>
+    <?php foreach (array_unique(array_merge(array_column($items, 2), ['menu'])) as $ic): ?><span data-ic="<?= e($ic) ?>"><?= icon($ic, 22) ?></span><?php endforeach; ?>
+  </template>
+</form>
+
 <script>
 document.addEventListener('DOMContentLoaded', () => {
+  const fm = document.getElementById('footer-menu');
+  const slots = [...fm.querySelectorAll('[data-footer-slot]')];
+  const icons = fm.querySelector('[data-footer-icons]').content;
+  const iconHtml = (n) => icons.querySelector('[data-ic="' + n + '"]')?.innerHTML || '';
+  const preview = () => {
+    // Prevent duplicates: an item chosen in one slot is disabled in the others.
+    const chosen = slots.map((s) => s.value).filter(Boolean);
+    slots.forEach((s) => [...s.options].forEach((o) => { o.disabled = o.value !== '' && o.value !== s.value && chosen.includes(o.value); }));
+    const parts = slots.filter((s) => s.value).map((s) => { const o = s.selectedOptions[0]; return [o.textContent, o.dataset.icon]; });
+    parts.push(['Μενού', 'menu']);
+    fm.querySelector('[data-footer-preview]').innerHTML = parts.map(([l, ic], i) =>
+      '<span style="display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;font-weight:600;color:' + (i === 0 ? 'var(--accent-text)' : 'var(--muted)') + '">' + iconHtml(ic) + l.replace(/[<>&]/g, '') + '</span>').join('');
+  };
+  slots.forEach((s) => s.addEventListener('change', preview));
+  fm.querySelector('[data-footer-reset]').addEventListener('click', () => {
+    ['home', 'jobs', 'runs', 'notifications'].forEach((v, i) => { slots[i].value = v; });
+    preview();
+  });
+  preview();
   const c = document.querySelector('[data-color]'), t = document.querySelector('[data-color-text]');
   const set = (v) => { c.value = v; t.value = v.toUpperCase(); document.documentElement.style.setProperty('--accent', v); };
   c.addEventListener('input', () => set(c.value));

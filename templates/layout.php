@@ -110,10 +110,9 @@ echo App\Core\View::partial('partials/head', ['title' => $title ?? '']);
 </div>
 
 <nav class="bottom-nav" aria-label="Γρήγορη πλοήγηση">
-  <a href="<?= e(url('/')) ?>" class="<?= $nav === 'dashboard' ? 'active' : '' ?>"><?= icon('home', 22) ?>Αρχική</a>
-  <?php if (Auth::can('jobs.view')): ?><a href="<?= e(url('jobs')) ?>" class="<?= $nav === 'jobs' ? 'active' : '' ?>"><?= icon('jobs', 22) ?>Jobs</a><?php endif; ?>
-  <?php if (Auth::can('runs.view')): ?><a href="<?= e(url('runs')) ?>" class="<?= $nav === 'runs' ? 'active' : '' ?>"><?= icon('runs', 22) ?>Εκτελέσεις</a><?php endif; ?>
-  <a href="<?= e(url('notifications')) ?>" class="<?= $nav === 'notifications' ? 'active' : '' ?>"><?= icon('bell', 22) ?>Alerts</a>
+  <?php foreach (App\Services\BottomNav::forCurrentUser() as $bn): ?>
+    <a href="<?= e($bn['url']) ?>" class="<?= $nav === $bn['nav'] ? 'active' : '' ?>"<?= $nav === $bn['nav'] ? ' aria-current="page"' : '' ?>><?= icon($bn['icon'], 22) ?><?= e($bn['label']) ?></a>
+  <?php endforeach; ?>
   <button type="button" data-drawer-open><?= icon('menu', 22) ?>Μενού</button>
 </nav>
 <div class="toast-wrap" id="toasts" aria-live="polite"></div>
