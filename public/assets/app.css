@@ -198,6 +198,8 @@ code, pre, .mono { font-family: var(--mono); }
 .table tr:hover td { background: var(--surface-2); }
 .table .num { text-align: right; font-variant-numeric: tabular-nums; }
 .table a.strong { color: var(--text); font-weight: 600; }
+.table tr.group-row td { background: var(--surface-2); padding-top: 10px; padding-bottom: 10px; font-size: 14px; color: var(--text-2); }
+.table tr.group-row:hover td { background: var(--surface-2); }
 
 /* KPIs & chart */
 .kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
@@ -347,5 +349,8 @@ dialog .dlg-body { padding: 22px; display: flex; flex-direction: column; gap: 14
   .table.rtable td.primary { display: block; text-align: left; font-size: 15px; }
   .table.rtable td.primary::before { content: none; }
   .table.rtable tr:hover td { background: transparent; }
+  .table.rtable tr.group-row { padding: 0; }
+  .table.rtable tr.group-row td { display: block; padding: 10px 16px !important; text-align: left; background: var(--surface-2); }
+  .table.rtable tr.group-row td::before { content: none; }
   .toast-wrap { bottom: 84px; }
 }

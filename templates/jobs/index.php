@@ -1,5 +1,5 @@
 <?php
-/** @var array $page @var string $filter @var string $q @var array $counts */
+/** @var array $page @var string $filter @var string $q @var array $counts @var string $group @var array $groups @var array $groupStats */
 use App\Auth\Auth;
 use App\Services\CronHelper;
 
@@ -20,12 +20,25 @@ $filters = ['all' => ['Όλα', $counts['all_count']], 'active' => ['Ενεργ�
   <form class="searchbar" action="<?= e(url('jobs')) ?>" role="search">
     <?= icon('search', 16) ?>
     <label class="sr-only" for="jq">Αναζήτηση</label>
-    <input id="jq" name="q" value="<?= e($q) ?>" placeholder="Αναζήτηση με όνομα ή URL">
+    <input id="jq" name="q" value="<?= e($q) ?>" placeholder="Αναζήτηση με όνομα, URL ή ομάδα">
     <input type="hidden" name="filter" value="<?= e($filter) ?>">
+    <input type="hidden" name="group" value="<?= e($group) ?>">
   </form>
+  <?php if ($groups): ?>
+    <form method="get" action="<?= e(url('jobs')) ?>" class="inline">
+      <input type="hidden" name="filter" value="<?= e($filter) ?>">
+      <input type="hidden" name="q" value="<?= e($q) ?>">
+      <label class="sr-only" for="jgroup">Ομάδα</label>
+      <select id="jgroup" class="select" name="group" data-autosubmit style="width:auto;min-height:44px;border-radius:11px">
+        <option value="">Όλες οι ομάδες</option>
+        <?php foreach ($groups as $g): ?><option value="<?= e($g['name']) ?>" <?= $group === $g['name'] ? 'selected' : '' ?>><?= e($g['name']) ?> (<?= (int) $g['n'] ?>)</option><?php endforeach; ?>
+        <?php if (isset($groupStats[''])): ?><option value="__none" <?= $group === '__none' ? 'selected' : '' ?>>Χωρίς ομάδα (<?= (int) $groupStats['']['n'] ?>)</option><?php endif; ?>
+      </select>
+    </form>
+  <?php endif; ?>
   <div class="chips" role="group" aria-label="Φίλτρα">
     <?php foreach ($filters as $k => [$label, $n]): ?>
-      <a class="chip round" style="display:inline-flex;align-items:center;gap:8px;text-decoration:none" aria-pressed="<?= $filter === $k ? 'true' : 'false' ?>" href="<?= e(url('jobs', ['filter' => $k, 'q' => $q])) ?>"><?= e($label) ?> <span class="xs"><?= (int) $n ?></span></a>
+      <a class="chip round" style="display:inline-flex;align-items:center;gap:8px;text-decoration:none" aria-pressed="<?= $filter === $k ? 'true' : 'false' ?>" href="<?= e(url('jobs', ['filter' => $k, 'q' => $q, 'group' => $group])) ?>"><?= e($label) ?> <span class="xs"><?= (int) $n ?></span></a>
     <?php endforeach; ?>
   </div>
 </div>
@@ -41,7 +54,29 @@ $filters = ['all' => ['Όλα', $counts['all_count']], 'active' => ['Ενεργ�
       <table class="table rtable">
         <thead><tr><th>Job</th><th>Πρόγραμμα</th><th>Τελευταία εκτέλεση</th><th>Επόμενη</th><th class="num">Ενεργό</th><th class="num"><span class="sr-only">Ενέργειες</span></th></tr></thead>
         <tbody>
-        <?php foreach ($page['rows'] as $j): ?>
+        <?php
+        $showGroups = (bool) $groups;
+        $currentGroup = false;
+        foreach ($page['rows'] as $j):
+            $g = (string) ($j['group_name'] ?? '');
+            if ($showGroups && $g !== $currentGroup):
+                $currentGroup = $g;
+                $st = $groupStats[$g] ?? ['n' => 0, 'active' => 0, 'failing' => 0];
+        ?>
+          <tr class="group-row">
+            <td colspan="6">
+              <div class="row" style="gap:10px">
+                <?= icon($g === '' ? 'jobs' : 'templates', 16) ?>
+                <strong><?= $g === '' ? 'Χωρίς ομάδα' : e($g) ?></strong>
+                <span class="xs muted"><?= (int) $st['n'] ?> jobs · <?= (int) $st['active'] ?> ενεργά</span>
+                <?php if ((int) $st['failing'] > 0): ?><span class="badge fail"><?= (int) $st['failing'] ?> με πρόβλημα</span><?php endif; ?>
+                <span class="grow"></span>
+                <?php if ($group === ''): ?><a class="xs" href="<?= e(url('jobs', ['group' => $g === '' ? '__none' : $g, 'filter' => $filter])) ?>">Μόνο αυτή</a><?php endif; ?>
+                <?php if ($canManage && $g !== ''): ?><a class="xs" href="<?= e(url('jobs/new', ['group' => $g])) ?>">+ Νέο job εδώ</a><?php endif; ?>
+              </div>
+            </td>
+          </tr>
+        <?php endif; ?>
           <tr>
             <td class="primary">
               <div class="stack-sm" style="gap:4px;min-width:0">

@@ -66,9 +66,17 @@ if ($hasOld) {
       <div class="row between"><h2>Γενικά</h2>
         <label class="check"><span class="switch"><input type="checkbox" name="enabled" value="1" <?= $v('enabled') ? 'checked' : '' ?>><span></span></span>Ενεργό</label>
       </div>
-      <label class="field">Όνομα
-        <input class="input" name="name" value="<?= e($v('name')) ?>" maxlength="150" required placeholder="π.χ. Συγχρονισμός παραγγελιών">
-      </label>
+      <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">
+        <label class="field">Όνομα
+          <input class="input" name="name" value="<?= e($v('name')) ?>" maxlength="150" required placeholder="π.χ. Συγχρονισμός παραγγελιών">
+        </label>
+        <label class="field">Ομάδα (Group) <span class="help">Προαιρετική. Διάλεξε υπάρχουσα ή γράψε νέα.</span>
+          <input class="input" name="group_name" value="<?= e($v('group_name')) ?>" maxlength="100" list="job-groups" placeholder="π.χ. ERP, Eshop, Backups" autocomplete="off">
+          <datalist id="job-groups">
+            <?php foreach ($groups as $g): ?><option value="<?= e($g['name']) ?>"><?= (int) $g['n'] ?> jobs</option><?php endforeach; ?>
+          </datalist>
+        </label>
+      </div>
       <label class="field">Περιγραφή <span class="help">Προαιρετική</span>
         <textarea class="textarea" name="description" rows="2" style="min-height:64px"><?= e($v('description')) ?></textarea>
       </label>

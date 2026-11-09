@@ -30,9 +30,17 @@ final class JobController extends Controller
         $where = 'FROM jobs j WHERE j.tenant_id = :tid';
         $params = ['tid' => $tid];
         if ($q !== '') {
-            $where .= ' AND (j.name LIKE :q OR j.url LIKE :q2)';
+            $where .= ' AND (j.name LIKE :q OR j.url LIKE :q2 OR j.group_name LIKE :q3)';
             $params['q'] = '%' . $q . '%';
             $params['q2'] = '%' . $q . '%';
+            $params['q3'] = '%' . $q . '%';
+        }
+        $group = (string) $this->req->query('group', '');
+        if ($group === '__none') {
+            $where .= ' AND j.group_name IS NULL';
+        } elseif ($group !== '') {
+            $where .= ' AND j.group_name = :grp';
+            $params['grp'] = $group;
         }
         $where .= match ($filter) {
             'active' => ' AND j.enabled = 1',
@@ -40,13 +48,23 @@ final class JobController extends Controller
             'paused' => ' AND j.enabled = 0',
             default => '',
         };
-        $page = $this->paginate($where, $params, 'j.*', 'j.name ASC', 30);
+        // Grouped jobs first (alphabetically), ungrouped last.
+        $page = $this->paginate($where, $params, 'j.*', 'j.group_name IS NULL, j.group_name ASC, j.name ASC', 50);
         $counts = $this->db->one(
             "SELECT COUNT(*) AS all_count, SUM(enabled = 1) AS active, SUM(enabled = 1 AND last_status = 'failed') AS issue, SUM(enabled = 0) AS paused FROM jobs WHERE tenant_id = ?",
             [$tid],
         );
+        $groupStats = [];
+        foreach ($this->db->all(
+            "SELECT COALESCE(group_name, '') AS g, COUNT(*) AS n, SUM(enabled = 1) AS active, SUM(enabled = 1 AND last_status = 'failed') AS failing
+             FROM jobs WHERE tenant_id = ? GROUP BY COALESCE(group_name, '')",
+            [$tid],
+        ) as $row) {
+            $groupStats[$row['g']] = $row;
+        }
         return $this->view('jobs/index', [
             'title' => 'Jobs', 'nav' => 'jobs', 'page' => $page, 'filter' => $filter, 'q' => $q, 'counts' => $counts,
+            'group' => $group, 'groups' => $this->groups(), 'groupStats' => $groupStats,
         ]);
     }
 
@@ -55,7 +73,7 @@ final class JobController extends Controller
         $this->authorize('jobs.manage');
         $tenant = $this->tenant();
         $job = [
-            'id' => null, 'name' => '', 'description' => '', 'enabled' => 1, 'method' => 'GET', 'url' => 'https://',
+            'id' => null, 'name' => '', 'group_name' => (string) $this->req->query('group', ''), 'description' => '', 'enabled' => 1, 'method' => 'GET', 'url' => 'https://',
             'body_type' => 'none', 'body' => '', 'cron_expr' => '*/5 * * * *', 'schedule_ui' => null,
             'timezone' => $tenant['timezone'], 'timeout_sec' => 30, 'max_retries' => 2, 'retry_strategy' => 'exponential',
             'retry_delay_sec' => 10, 'overlap_policy' => 'skip', 'success_codes' => '200-299', 'success_contains' => '',
@@ -87,6 +105,15 @@ final class JobController extends Controller
         return $this->form($job, $headers, $notify, $recent, $targets);
     }
 
+    /** Existing group names of the tenant with job counts. */
+    private function groups(): array
+    {
+        return $this->db->all(
+            'SELECT group_name AS name, COUNT(*) AS n FROM jobs WHERE tenant_id = ? AND group_name IS NOT NULL GROUP BY group_name ORDER BY group_name',
+            [$this->tenantId()],
+        );
+    }
+
     /** Members of the tenant with their push devices, for the recipient picker. */
     private function pushMembers(): array
     {
@@ -107,6 +134,7 @@ final class JobController extends Controller
         $tid = $this->tenantId();
         $tenant = $this->tenant();
         return $this->view('jobs/form', [
+            'groups' => $this->groups(),
             'pushMembers' => $this->pushMembers(),
             'pushTargets' => $targets,
             'title' => $job['id'] ? $job['name'] : 'Νέο job',
@@ -249,8 +277,10 @@ final class JobController extends Controller
         if ($scheduleUi !== '' && json_decode($scheduleUi) === null) {
             $scheduleUi = '';
         }
+        $group = trim((string) preg_replace('/\s+/u', ' ', (string) $r->input('group_name', '')));
         $data = [
             'name' => $name,
+            'group_name' => $group !== '' ? mb_substr($group, 0, 100) : null,
             'description' => mb_substr((string) $r->input('description', ''), 0, 2000) ?: null,
             'enabled' => $r->input('enabled') ? 1 : 0,
             'method' => $method,
@@ -376,7 +406,7 @@ final class JobController extends Controller
 
     private function auditable(array $job): array
     {
-        $out = array_intersect_key($job, array_flip(['name', 'enabled', 'method', 'url', 'body_type', 'cron_expr', 'timezone', 'timeout_sec', 'max_retries', 'overlap_policy', 'success_codes', 'active_from', 'active_until', 'notify_emails']));
+        $out = array_intersect_key($job, array_flip(['name', 'group_name', 'enabled', 'method', 'url', 'body_type', 'cron_expr', 'timezone', 'timeout_sec', 'max_retries', 'overlap_policy', 'success_codes', 'active_from', 'active_until', 'notify_emails']));
         $out['headers'] = array_map(fn ($h) => $h['name'] . ': ' . (!empty($h['secret']) ? '••••' : $h['value']), HttpExecutor::headers($job));
         return $out;
     }
