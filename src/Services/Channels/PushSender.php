@@ -60,16 +60,33 @@ final class PushSender
      */
     public static function sendToUsers(array $userIds, array $payload): array
     {
+        if (!$userIds) {
+            return ['sent' => 0, 'failed' => 0, 'errors' => []];
+        }
+        $in = implode(',', array_fill(0, count($userIds), '?'));
+        $ids = App::db()->column("SELECT id FROM push_subscriptions WHERE enabled = 1 AND user_id IN ($in)", array_values($userIds));
+        return self::sendToSubscriptions(array_map('intval', $ids), $payload);
+    }
+
+    /**
+     * Sends to specific devices (push_subscriptions ids). Disabled devices are skipped.
+     * @param int[] $subscriptionIds
+     * @return array{sent:int, failed:int, errors:string[]}
+     */
+    public static function sendToSubscriptions(array $subscriptionIds, array $payload, bool $includeDisabled = false): array
+    {
         $out = ['sent' => 0, 'failed' => 0, 'errors' => []];
-        if (!$userIds || !self::configured()) {
-            if (!self::configured()) {
-                $out['errors'][] = 'Τα κλειδιά VAPID δεν έχουν ρυθμιστεί.';
-            }
+        if (!self::configured()) {
+            $out['errors'][] = 'Τα κλειδιά VAPID δεν έχουν ρυθμιστεί.';
+            return $out;
+        }
+        $subscriptionIds = array_values(array_unique(array_map('intval', $subscriptionIds)));
+        if (!$subscriptionIds) {
             return $out;
         }
         $db = App::db();
-        $in = implode(',', array_fill(0, count($userIds), '?'));
-        $subs = $db->all("SELECT * FROM push_subscriptions WHERE user_id IN ($in)", array_values($userIds));
+        $in = implode(',', array_fill(0, count($subscriptionIds), '?'));
+        $subs = $db->all("SELECT * FROM push_subscriptions WHERE id IN ($in)" . ($includeDisabled ? '' : ' AND enabled = 1'), $subscriptionIds);
         if (!$subs) {
             return $out;
         }

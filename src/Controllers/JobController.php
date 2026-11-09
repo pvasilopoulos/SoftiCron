@@ -60,7 +60,7 @@ final class JobController extends Controller
             'timezone' => $tenant['timezone'], 'timeout_sec' => 30, 'max_retries' => 2, 'retry_strategy' => 'exponential',
             'retry_delay_sec' => 10, 'overlap_policy' => 'skip', 'success_codes' => '200-299', 'success_contains' => '',
             'slow_threshold_ms' => '', 'active_from' => '', 'active_until' => '', 'notify_emails' => '', 'notify_telegram_chat' => '',
-            'email_connector_id' => null, 'telegram_connector_id' => null,
+            'email_connector_id' => null, 'telegram_connector_id' => null, 'push_target' => 'all',
         ];
         $notify = ['failed' => ['push' => true, 'email' => true], 'recovered' => ['push' => true], 'missed' => ['email' => true]];
         return $this->form($job, [['name' => 'Accept', 'value' => 'application/json', 'secret' => false]], $notify);
@@ -76,14 +76,39 @@ final class JobController extends Controller
         }
         $headers = array_map(fn ($h) => ['name' => $h['name'] ?? '', 'value' => !empty($h['secret']) ? '' : ($h['value'] ?? ''), 'secret' => !empty($h['secret'])], HttpExecutor::headers($job));
         $recent = $this->db->all('SELECT id, status, http_status, duration_ms, is_slow, created_at, trigger_type FROM job_runs WHERE job_id = ? ORDER BY id DESC LIMIT 10', [$id]);
-        return $this->form($job, $headers, $notify, $recent);
+        $targets = ['users' => [], 'devices' => []];
+        foreach ($this->db->all('SELECT user_id, subscription_id FROM job_push_targets WHERE job_id = ?', [$id]) as $t) {
+            if ($t['subscription_id']) {
+                $targets['devices'][] = (int) $t['subscription_id'];
+            } elseif ($t['user_id']) {
+                $targets['users'][] = (int) $t['user_id'];
+            }
+        }
+        return $this->form($job, $headers, $notify, $recent, $targets);
     }
 
-    private function form(array $job, array $headers, array $notify, array $recent = []): Response
+    /** Members of the tenant with their push devices, for the recipient picker. */
+    private function pushMembers(): array
+    {
+        $members = $this->db->all(
+            "SELECT u.id, u.name, u.email FROM memberships m JOIN users u ON u.id = m.user_id
+             WHERE m.tenant_id = ? AND u.status = 'active' ORDER BY u.name",
+            [$this->tenantId()],
+        );
+        foreach ($members as &$m) {
+            $m['devices'] = $this->db->all('SELECT id, label, user_agent, enabled FROM push_subscriptions WHERE user_id = ? ORDER BY id', [$m['id']]);
+        }
+        unset($m);
+        return $members;
+    }
+
+    private function form(array $job, array $headers, array $notify, array $recent = [], array $targets = ['users' => [], 'devices' => []]): Response
     {
         $tid = $this->tenantId();
         $tenant = $this->tenant();
         return $this->view('jobs/form', [
+            'pushMembers' => $this->pushMembers(),
+            'pushTargets' => $targets,
             'title' => $job['id'] ? $job['name'] : 'Νέο job',
             'nav' => 'jobs',
             'job' => $job,
@@ -250,7 +275,35 @@ final class JobController extends Controller
             'notify_telegram_chat' => mb_substr((string) $r->input('notify_telegram_chat', ''), 0, 100) ?: null,
             'email_connector_id' => $connector('email_connector_id', 'email'),
             'telegram_connector_id' => $connector('telegram_connector_id', 'telegram'),
+            'push_target' => $r->input('push_target') === 'selected' ? 'selected' : 'all',
         ];
+        // Push recipients: only members of this tenant and their own devices are accepted.
+        $memberIds = array_map('intval', $this->db->column('SELECT user_id FROM memberships WHERE tenant_id = ?', [$tenant['id']]));
+        $targets = ['users' => [], 'devices' => []];
+        foreach ((array) ($_POST['push_users'] ?? []) as $uid) {
+            if (in_array((int) $uid, $memberIds, true)) {
+                $targets['users'][] = (int) $uid;
+            }
+        }
+        $devIds = array_map('intval', (array) ($_POST['push_devices'] ?? []));
+        if ($devIds && $memberIds) {
+            $in = implode(',', array_fill(0, count($devIds), '?'));
+            $inM = implode(',', array_fill(0, count($memberIds), '?'));
+            foreach ($this->db->all("SELECT id, user_id FROM push_subscriptions WHERE id IN ($in) AND user_id IN ($inM)", array_merge($devIds, $memberIds)) as $d) {
+                if (!in_array((int) $d['user_id'], $targets['users'], true)) {
+                    $targets['devices'][] = (int) $d['id'];
+                }
+            }
+        }
+        if ($data['push_target'] === 'selected' && !$targets['users'] && !$targets['devices']) {
+            $hasPushRule = false;
+            foreach ((array) ($_POST['notify'] ?? []) as $chs) {
+                $hasPushRule = $hasPushRule || !empty($chs['push']);
+            }
+            if ($hasPushRule) {
+                $errors[] = 'Διάλεξε τουλάχιστον έναν χρήστη ή μία συσκευή για τα push, ή επίλεξε «Όλοι».';
+            }
+        }
         $rules = [];
         foreach ((array) ($_POST['notify'] ?? []) as $event => $channels) {
             if (!isset(Notifier::EVENTS[$event]) || !is_array($channels)) {
@@ -262,14 +315,21 @@ final class JobController extends Controller
                 }
             }
         }
-        return [$data, $rules, $errors];
+        return [$data, $rules, $errors, $targets];
     }
 
-    private function saveRules(int $jobId, array $rules): void
+    private function saveRules(int $jobId, array $rules, array $targets): void
     {
         $this->db->exec('DELETE FROM job_notifications WHERE job_id = ?', [$jobId]);
         foreach ($rules as [$event, $ch]) {
             $this->db->insert('job_notifications', ['job_id' => $jobId, 'event' => $event, 'channel' => $ch]);
+        }
+        $this->db->exec('DELETE FROM job_push_targets WHERE job_id = ?', [$jobId]);
+        foreach ($targets['users'] as $uid) {
+            $this->db->insert('job_push_targets', ['job_id' => $jobId, 'user_id' => $uid]);
+        }
+        foreach ($targets['devices'] as $sid) {
+            $this->db->insert('job_push_targets', ['job_id' => $jobId, 'subscription_id' => $sid]);
         }
     }
 
@@ -277,7 +337,7 @@ final class JobController extends Controller
     {
         $this->authorize('jobs.manage');
         $tenant = $this->tenant();
-        [$data, $rules, $errors] = $this->collect(null);
+        [$data, $rules, $errors, $targets] = $this->collect(null);
         $count = (int) $this->db->value('SELECT COUNT(*) FROM jobs WHERE tenant_id = ?', [$tenant['id']]);
         if ($count >= (int) $tenant['max_jobs']) {
             $errors[] = 'Έφτασες το όριο των ' . $tenant['max_jobs'] . ' jobs του πλάνου σου.';
@@ -285,9 +345,9 @@ final class JobController extends Controller
         if ($errors) {
             return $this->invalid($errors);
         }
-        $id = $this->db->transaction(function () use ($data, $rules, $tenant): int {
+        $id = $this->db->transaction(function () use ($data, $rules, $targets, $tenant): int {
             $id = $this->db->insert('jobs', $data + ['tenant_id' => $tenant['id'], 'created_by' => Auth::id()]);
-            $this->saveRules($id, $rules);
+            $this->saveRules($id, $rules, $targets);
             return $id;
         });
         Scheduler::refreshNextRun($id);
@@ -300,13 +360,13 @@ final class JobController extends Controller
     {
         $this->authorize('jobs.manage');
         $job = $this->find($id);
-        [$data, $rules, $errors] = $this->collect($job);
+        [$data, $rules, $errors, $targets] = $this->collect($job);
         if ($errors) {
             return $this->invalid($errors);
         }
-        $this->db->transaction(function () use ($id, $data, $rules): void {
+        $this->db->transaction(function () use ($id, $data, $rules, $targets): void {
             $this->db->update('jobs', $data, 'id = :id', ['id' => $id]);
-            $this->saveRules($id, $rules);
+            $this->saveRules($id, $rules, $targets);
         });
         Scheduler::refreshNextRun($id);
         Audit::log('job.updated', 'job', $id, $data['name'], $this->auditable($job), $this->auditable($data));
@@ -370,6 +430,7 @@ final class JobController extends Controller
         $copy['created_by'] = Auth::id();
         $newId = $this->db->insert('jobs', $copy);
         $this->db->exec('INSERT INTO job_notifications (job_id, event, channel, template_id) SELECT ?, event, channel, template_id FROM job_notifications WHERE job_id = ?', [$newId, $id]);
+        $this->db->exec('INSERT INTO job_push_targets (job_id, user_id, subscription_id) SELECT ?, user_id, subscription_id FROM job_push_targets WHERE job_id = ?', [$newId, $id]);
         Audit::log('job.created', 'job', $newId, $copy['name'] . ' (αντιγραφή από #' . $id . ')');
         $this->flash('success', 'Δημιουργήθηκε αντίγραφο σε παύση.');
         return $this->redirect("jobs/$newId/edit");

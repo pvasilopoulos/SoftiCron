@@ -72,6 +72,25 @@
   }));
   renderBody();
 
+  // ---- Push recipients ----
+  const pt = form.querySelector('[data-push-targets]');
+  if (pt) {
+    const sync = () => {
+      const selected = pt.querySelector('input[name="push_target"]:checked')?.value === 'selected';
+      pt.querySelector('[data-push-picker]').classList.toggle('hidden', !selected);
+      pt.querySelector('[data-push-all-help]').classList.toggle('hidden', selected);
+    };
+    pt.addEventListener('change', (e) => {
+      if (e.target.matches('[data-push-user]')) {
+        // "All devices" of a user: tick and lock that user's individual devices.
+        let el = e.target.closest('.stack-sm').querySelectorAll('[data-push-device]');
+        el.forEach((d) => { d.checked = e.target.checked || d.checked; d.disabled = e.target.checked; });
+      }
+      sync();
+    });
+    sync();
+  }
+
   // ---- Test run ----
   const card = document.getElementById('test-run');
   const result = card?.querySelector('[data-test-result]');

@@ -24,6 +24,10 @@ $action = $isNew ? url('jobs') : url('jobs/' . $job['id']);
 $tz = $tenant['timezone'];
 $bodyType = (string) ($v('body_type') ?: 'none');
 $scheduleUi = (string) ($v('schedule_ui') ?? '');
+$pushTarget = (string) ($v('push_target') ?: 'all');
+if ($hasOld) {
+    $pushTargets = ['users' => array_map('intval', (array) old('push_users', [])), 'devices' => array_map('intval', (array) old('push_devices', []))];
+}
 ?>
 <div class="page-head">
   <div>
@@ -225,6 +229,28 @@ $scheduleUi = (string) ($v('schedule_ui') ?? '');
             <?php endforeach; ?>
           </tbody>
         </table>
+      </div>
+      <div class="stack-sm" data-push-targets>
+        <span class="small" style="font-weight:500;color:var(--text-2)">Push προς</span>
+        <div class="seg" role="radiogroup" aria-label="Παραλήπτες push">
+          <label style="display:contents"><input type="radio" class="sr-only" name="push_target" value="all" <?= $pushTarget === 'all' ? 'checked' : '' ?>><span class="seg-opt">Όλους</span></label>
+          <label style="display:contents"><input type="radio" class="sr-only" name="push_target" value="selected" <?= $pushTarget === 'selected' ? 'checked' : '' ?>><span class="seg-opt">Επιλεγμένους</span></label>
+        </div>
+        <p class="xs muted" data-push-all-help>Όλα τα μέλη που έχουν ενεργοποιήσει push, σύμφωνα με τις προτιμήσεις του καθενός.</p>
+        <div class="stack-sm" data-push-picker style="max-height:280px;overflow:auto;border:1px solid var(--border);border-radius:10px;padding:10px 12px">
+          <?php if (!$pushMembers): ?><p class="xs muted">Δεν υπάρχουν μέλη.</p><?php endif; ?>
+          <?php foreach ($pushMembers as $m): $userOn = in_array((int) $m['id'], $pushTargets['users'], true); ?>
+            <div class="stack-sm" style="gap:4px">
+              <label class="check small"><input type="checkbox" name="push_users[]" value="<?= (int) $m['id'] ?>" <?= $userOn ? 'checked' : '' ?> data-push-user>
+                <strong><?= e($m['name']) ?></strong> <span class="xs muted">όλες οι συσκευές (<?= count($m['devices']) ?>)</span></label>
+              <?php foreach ($m['devices'] as $d): ?>
+                <label class="check xs" style="padding-left:28px"><input type="checkbox" name="push_devices[]" value="<?= (int) $d['id'] ?>" <?= $userOn || in_array((int) $d['id'], $pushTargets['devices'], true) ? 'checked' : '' ?> <?= $userOn ? 'disabled' : '' ?> data-push-device>
+                  <?= e($d['label'] ?: $d['user_agent'] ?: 'Συσκευή') ?><?= $d['enabled'] ? '' : ' <span class="badge off">ανενεργή</span>' ?></label>
+              <?php endforeach; ?>
+              <?php if (!$m['devices']): ?><span class="xs muted" style="padding-left:28px">Χωρίς συσκευές με ενεργό push</span><?php endif; ?>
+            </div>
+          <?php endforeach; ?>
+        </div>
       </div>
       <label class="field">Παραλήπτες email <span class="help">Κενό = οι προεπιλεγμένοι από τις Ρυθμίσεις</span>
         <input class="input" name="notify_emails" value="<?= e($v('notify_emails')) ?>" placeholder="ops@example.gr, it@example.gr">

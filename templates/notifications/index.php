@@ -32,15 +32,23 @@ $tz = Auth::tenant()['timezone'];
       <h2 style="margin-bottom:8px">Οι συσκευές μου</h2>
       <?php if (!$devices): ?><p class="small muted">Δεν έχεις ενεργοποιήσει ειδοποιήσεις σε καμία συσκευή.</p><?php endif; ?>
       <?php foreach ($devices as $d): ?>
-        <div class="list-item">
+        <div class="list-item" style="flex-wrap:wrap" data-device-endpoint="<?= e(hash('sha256', $d['endpoint'])) ?>">
           <span class="avatar"><?= icon(str_contains((string) $d['user_agent'], 'iPhone') || str_contains((string) $d['user_agent'], 'Android') ? 'bell' : 'dashboard', 16) ?></span>
-          <div class="grow stack-sm" style="gap:1px">
-            <strong class="small"><?= e($d['user_agent'] ?: 'Συσκευή') ?></strong>
-            <span class="xs muted">Από <?= e(fmt_dt($d['created_at'], $tz, 'd/m/Y')) ?> · τελευταία αποστολή <?= e($d['last_success_at'] ? rel_time($d['last_success_at']) : 'ποτέ') ?></span>
-          </div>
+          <form method="post" action="<?= e(url('notifications/devices/' . $d['id'])) ?>" class="grow row" style="gap:8px;min-width:220px">
+            <?= csrf_field() ?>
+            <div class="stack-sm grow" style="gap:2px;min-width:160px">
+              <label class="sr-only" for="dev-<?= (int) $d['id'] ?>">Όνομα συσκευής</label>
+              <input id="dev-<?= (int) $d['id'] ?>" class="input" name="label" value="<?= e($d['label'] ?? '') ?>" placeholder="<?= e($d['user_agent'] ?: 'Συσκευή') ?>" maxlength="100" style="min-height:36px">
+              <span class="xs muted"><?= e($d['user_agent'] ?: 'Συσκευή') ?> · από <?= e(fmt_dt($d['created_at'], $tz, 'd/m/Y')) ?> · τελευταία αποστολή <?= e($d['last_success_at'] ? rel_time($d['last_success_at']) : 'ποτέ') ?><span class="this-device hidden"> · <strong>αυτή η συσκευή</strong></span></span>
+            </div>
+            <label class="check xs" title="Λήψη ειδοποιήσεων"><span class="switch"><input type="checkbox" name="enabled" value="1" <?= $d['enabled'] ? 'checked' : '' ?>><span></span></span>Ενεργή</label>
+            <button class="btn btn-sm" type="submit">Αποθήκευση</button>
+          </form>
+          <form method="post" action="<?= e(url('notifications/devices/' . $d['id'] . '/test')) ?>" class="inline"><?= csrf_field() ?><button class="btn btn-ghost btn-sm" type="submit" title="Δοκιμή σε αυτή τη συσκευή"><?= icon('send', 14) ?>Δοκιμή</button></form>
           <form method="post" action="<?= e(url('notifications/devices/' . $d['id'] . '/delete')) ?>" data-confirm="Να αφαιρεθεί η συσκευή;"><?= csrf_field() ?><button class="btn btn-ghost btn-icon btn-sm" type="submit" aria-label="Αφαίρεση συσκευής"><?= icon('trash', 16) ?></button></form>
         </div>
       <?php endforeach; ?>
+      <p class="xs muted" style="margin-top:8px">Δώσε όνομα σε κάθε συσκευή (π.χ. «Κινητό», «Laptop γραφείου»), για να την αναγνωρίζουν οι διαχειριστές όταν επιλέγουν παραλήπτες σε ένα job. Μια ανενεργή συσκευή δεν λαμβάνει καμία ειδοποίηση.</p>
     </section>
   </div>
 
@@ -82,7 +90,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     return sub;
   };
   let sub = await refresh();
-  if (sub) { try { await window.api('/notifications/subscribe', { method: 'POST', json: sub.toJSON() }); } catch (e) {} }
+  if (sub) {
+    try { await window.api('/notifications/subscribe', { method: 'POST', json: sub.toJSON() }); } catch (e) {}
+    // Mark "this device" in the list.
+    try {
+      const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(sub.endpoint));
+      const hex = [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
+      document.querySelector('[data-device-endpoint="' + hex + '"] .this-device')?.classList.remove('hidden');
+    } catch (e) {}
+  }
   en.addEventListener('click', async () => {
     try {
       const perm = await Notification.requestPermission();

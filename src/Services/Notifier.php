@@ -188,11 +188,11 @@ final class Notifier
             return ['chat ' . $chat];
         }
         if ($channel === 'push') {
-            $users = self::pushRecipients($tid, $event);
-            if (!$users) {
+            $subs = self::pushSubscriptions($job, $tid, $event);
+            if (!$subs) {
                 return [];
             }
-            $res = PushSender::sendToUsers($users, [
+            $res = PushSender::sendToSubscriptions($subs, [
                 'title' => $subject,
                 'body' => $body,
                 'url' => $ctx['run']['link'] ?? abs_url(''),
@@ -206,6 +206,34 @@ final class Notifier
             return $res['sent'] > 0 ? [$res['sent'] . ' συσκευές'] : [];
         }
         throw new \RuntimeException("Άγνωστο κανάλι $channel");
+    }
+
+    /**
+     * Device ids that should get a push for this job/event.
+     * 'all': every member's enabled devices, filtered by each user's event preferences.
+     * 'selected': only the users/devices chosen on the job (explicit choice, preferences ignored),
+     * still limited to current members of the tenant and to enabled devices.
+     * @return int[]
+     */
+    public static function pushSubscriptions(array $job, int $tenantId, string $event): array
+    {
+        $db = App::db();
+        if (($job['push_target'] ?? 'all') !== 'selected') {
+            $users = self::pushRecipients($tenantId, $event);
+            if (!$users) {
+                return [];
+            }
+            $in = implode(',', array_fill(0, count($users), '?'));
+            return array_map('intval', $db->column("SELECT id FROM push_subscriptions WHERE enabled = 1 AND user_id IN ($in)", $users));
+        }
+        return array_map('intval', $db->column(
+            "SELECT DISTINCT s.id FROM job_push_targets t
+             JOIN push_subscriptions s ON (t.subscription_id = s.id OR (t.subscription_id IS NULL AND s.user_id = t.user_id))
+             JOIN memberships m ON m.user_id = s.user_id AND m.tenant_id = ?
+             JOIN users u ON u.id = s.user_id AND u.status = 'active'
+             WHERE t.job_id = ? AND s.enabled = 1",
+            [$tenantId, $job['id']],
+        ));
     }
 
     /** Users of the tenant who want push for this event. */

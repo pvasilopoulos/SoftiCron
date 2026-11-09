@@ -16,7 +16,7 @@ final class NotificationController extends Controller
     {
         $tid = $this->tenantId();
         $uid = (int) Auth::id();
-        $devices = $this->db->all('SELECT id, user_agent, created_at, last_success_at FROM push_subscriptions WHERE user_id = ? ORDER BY id DESC', [$uid]);
+        $devices = $this->db->all('SELECT id, user_agent, label, enabled, endpoint, created_at, last_success_at FROM push_subscriptions WHERE user_id = ? ORDER BY id DESC', [$uid]);
         $prefs = $this->db->value('SELECT events FROM user_notification_prefs WHERE user_id = ? AND tenant_id = ?', [$uid, $tid]);
         $events = $prefs !== null ? array_filter(explode(',', (string) $prefs)) : Notifier::DEFAULT_USER_EVENTS;
         return $this->view('notifications/index', [
@@ -61,6 +61,48 @@ final class NotificationController extends Controller
         $endpoint = (string) $this->req->input('endpoint', '');
         $this->db->exec('DELETE FROM push_subscriptions WHERE endpoint_hash = ? AND user_id = ?', [hash('sha256', $endpoint), Auth::id()]);
         return $this->json(['ok' => true]);
+    }
+
+    private function device(int $id): array
+    {
+        $d = $this->db->one('SELECT * FROM push_subscriptions WHERE id = ? AND user_id = ?', [$id, Auth::id()]);
+        if (!$d) {
+            throw \App\Core\HttpException::notFound('Η συσκευή δεν βρέθηκε.');
+        }
+        return $d;
+    }
+
+    public function updateDevice(int $id): Response
+    {
+        $this->user();
+        $this->device($id);
+        $label = mb_substr(trim((string) $this->req->input('label', '')), 0, 100);
+        $this->db->update('push_subscriptions', [
+            'label' => $label !== '' ? $label : null,
+            'enabled' => $this->req->input('enabled') ? 1 : 0,
+        ], 'id = :id', ['id' => $id]);
+        if ($this->req->wantsJson()) {
+            return $this->json(['ok' => true]);
+        }
+        $this->flash('success', 'Η συσκευή ενημερώθηκε.');
+        return $this->redirect('notifications');
+    }
+
+    public function testDevice(int $id): Response
+    {
+        $this->user();
+        $d = $this->device($id);
+        $res = PushSender::sendToSubscriptions([$id], [
+            'title' => 'Δοκιμαστική ειδοποίηση',
+            'body' => 'Συσκευή: ' . ($d['label'] ?: $d['user_agent'] ?: 'χωρίς όνομα'),
+            'url' => abs_url('notifications'),
+            'tag' => 'test-' . $id,
+            'icon' => abs_url('assets/icons/icon-192.png'),
+            'badge' => abs_url('assets/icons/badge-72.png'),
+        ], true);
+        $ok = $res['sent'] > 0;
+        $this->flash($ok ? 'success' : 'error', $ok ? 'Στάλθηκε.' : 'Αποτυχία: ' . (implode('; ', array_slice($res['errors'], 0, 2)) ?: 'άγνωστο σφάλμα'));
+        return $this->redirect('notifications');
     }
 
     public function deleteDevice(int $id): Response

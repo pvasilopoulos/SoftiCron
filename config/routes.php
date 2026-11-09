@@ -60,6 +60,8 @@ return static function (RouteCollector $r): void {
     $r->post('/notifications/subscribe', [C\NotificationController::class, 'subscribe']);
     $r->post('/notifications/unsubscribe', [C\NotificationController::class, 'unsubscribe']);
     $r->post('/notifications/devices/{id:\d+}/delete', [C\NotificationController::class, 'deleteDevice']);
+    $r->post('/notifications/devices/{id:\d+}', [C\NotificationController::class, 'updateDevice']);
+    $r->post('/notifications/devices/{id:\d+}/test', [C\NotificationController::class, 'testDevice']);
     $r->post('/notifications/test', [C\NotificationController::class, 'test']);
 
     // Users & roles
