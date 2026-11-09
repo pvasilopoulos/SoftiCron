@@ -225,12 +225,13 @@ if ($hasOld) {
       <h2>Ειδοποιήσεις</h2>
       <div class="table-wrap">
         <table class="table" style="font-size:13px">
-          <thead><tr><th style="padding-left:0">Γεγονός</th><?php foreach (Notifier::CHANNELS as $ch => $l): ?><th style="text-align:center"><?= e($l) ?></th><?php endforeach; ?></tr></thead>
+          <?php $channels = Notifier::availableChannels((int) $tenant['id']); foreach (array_keys($notify) as $_ev) { foreach (array_keys($notify[$_ev]) as $_ch) { if (!isset($channels[$_ch]) && isset(Notifier::CHANNELS[$_ch])) { $channels[$_ch] = Notifier::CHANNELS[$_ch]; } } } ?>
+          <thead><tr><th style="padding-left:0">Γεγονός</th><?php foreach ($channels as $ch => $l): ?><th style="text-align:center"><?= e($l) ?></th><?php endforeach; ?></tr></thead>
           <tbody>
             <?php foreach (Notifier::EVENTS as $ev => $label): ?>
               <tr>
                 <td style="padding-left:0"><?= e($label) ?></td>
-                <?php foreach (Notifier::CHANNELS as $ch => $l): ?>
+                <?php foreach ($channels as $ch => $l): ?>
                   <td style="text-align:center"><input type="checkbox" name="notify[<?= $ev ?>][<?= $ch ?>]" value="1" <?= !empty($notify[$ev][$ch]) ? 'checked' : '' ?> aria-label="<?= e($label . ' · ' . $l) ?>" style="width:18px;height:18px;accent-color:var(--accent)"></td>
                 <?php endforeach; ?>
               </tr>

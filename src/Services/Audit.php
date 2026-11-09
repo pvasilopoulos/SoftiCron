@@ -103,6 +103,7 @@ final class Audit
         'branding.updated' => 'Αλλαγή branding',
         'profile.updated' => 'Αλλαγή προφίλ',
         'profile.password' => 'Αλλαγή κωδικού',
+        'audit.exported' => 'Εξαγωγή audit log',
         'tenant.created' => 'Νέος tenant',
         'tenant.updated' => 'Αλλαγή tenant',
     ];

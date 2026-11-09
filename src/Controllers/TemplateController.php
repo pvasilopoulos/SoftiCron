@@ -16,8 +16,98 @@ final class TemplateController extends Controller
     public function index(): Response
     {
         $this->authorize('templates.manage');
-        $rows = $this->db->all('SELECT * FROM message_templates WHERE tenant_id = ? ORDER BY FIELD(event, "failed","recovered","missed","slow","succeeded"), FIELD(channel, "email","telegram","push"), name', [$this->tenantId()]);
-        return $this->view('templates/index', ['title' => 'Templates μηνυμάτων', 'nav' => 'templates', 'rows' => $rows]);
+        Notifier::seedTemplates($this->tenantId()); // adds templates for newly introduced channels
+        $f = [
+            'event' => (string) $this->req->query('event', ''),
+            'channel' => (string) $this->req->query('channel', ''),
+            'q' => (string) $this->req->query('q', ''),
+        ];
+        $sql = 'SELECT t.*, (SELECT COUNT(*) FROM job_notifications n WHERE n.template_id = t.id) AS used_by FROM message_templates t WHERE t.tenant_id = :tid';
+        $p = ['tid' => $this->tenantId()];
+        if (isset(Notifier::EVENTS[$f['event']])) {
+            $sql .= ' AND t.event = :ev';
+            $p['ev'] = $f['event'];
+        } else {
+            $f['event'] = '';
+        }
+        if (isset(Notifier::TEMPLATE_CHANNELS[$f['channel']])) {
+            $sql .= ' AND t.channel = :ch';
+            $p['ch'] = $f['channel'];
+        } else {
+            $f['channel'] = '';
+        }
+        if ($f['q'] !== '') {
+            $sql .= ' AND (t.name LIKE :q OR t.subject LIKE :q2 OR t.body LIKE :q3)';
+            $p['q'] = $p['q2'] = $p['q3'] = '%' . $f['q'] . '%';
+        }
+        $order = "FIELD(t.event, '" . implode("','", array_keys(Notifier::EVENTS)) . "'), FIELD(t.channel, '" . implode("','", array_keys(Notifier::TEMPLATE_CHANNELS)) . "'), t.is_default DESC, t.name";
+        $rows = $this->db->all("$sql ORDER BY $order", $p);
+        $grouped = [];
+        foreach ($rows as $r) {
+            $grouped[$r['event']][] = $r;
+        }
+        $total = (int) $this->db->value('SELECT COUNT(*) FROM message_templates WHERE tenant_id = ?', [$this->tenantId()]);
+        return $this->view('templates/index', ['title' => 'Templates μηνυμάτων', 'nav' => 'templates', 'grouped' => $grouped, 'f' => $f, 'total' => $total, 'count' => count($rows)]);
+    }
+
+    public function duplicate(int $id): Response
+    {
+        $this->authorize('templates.manage');
+        $tpl = $this->find($id);
+        $newId = $this->db->insert('message_templates', [
+            'tenant_id' => $this->tenantId(), 'name' => mb_substr($tpl['name'] . ' (αντίγραφο)', 0, 120), 'event' => $tpl['event'],
+            'channel' => $tpl['channel'], 'subject' => $tpl['subject'], 'body' => $tpl['body'], 'is_default' => 0,
+        ]);
+        Audit::log('template.created', 'template', $newId, $tpl['name'] . ' (αντίγραφο)');
+        $this->flash('success', 'Δημιουργήθηκε αντίγραφο.');
+        return $this->redirect("templates/$newId/edit");
+    }
+
+    public function makeDefault(int $id): Response
+    {
+        $this->authorize('templates.manage');
+        $tpl = $this->find($id);
+        $this->db->exec('UPDATE message_templates SET is_default = (id = ?) WHERE tenant_id = ? AND event = ? AND channel = ?', [$id, $this->tenantId(), $tpl['event'], $tpl['channel']]);
+        Audit::log('template.updated', 'template', $id, $tpl['name'] . ' → προεπιλογή');
+        $this->flash('success', '«' . $tpl['name'] . '» είναι πλέον η προεπιλογή για ' . (Notifier::EVENTS[$tpl['event']] ?? '') . ' · ' . (Notifier::TEMPLATE_CHANNELS[$tpl['channel']] ?? '') . '.');
+        return $this->back('templates');
+    }
+
+    /** Restores the built-in subject/body for this event + channel. */
+    public function reset(int $id): Response
+    {
+        $this->authorize('templates.manage');
+        $tpl = $this->find($id);
+        [$subject, $body] = Notifier::DEFAULTS[$tpl['event']][$tpl['channel']] ?? [null, null];
+        if ($body === null) {
+            $this->flash('error', 'Δεν υπάρχει ενσωματωμένο κείμενο για αυτό το κανάλι.');
+            return $this->back('templates');
+        }
+        $this->db->update('message_templates', ['subject' => $subject !== '' ? $subject : null, 'body' => $body], 'id = :id', ['id' => $id]);
+        Audit::log('template.updated', 'template', $id, $tpl['name'] . ' → επαναφορά αρχικού κειμένου', ['subject' => $tpl['subject'], 'body' => $tpl['body']], ['subject' => $subject, 'body' => $body]);
+        $this->flash('success', 'Το template επανήλθε στο αρχικό κείμενο.');
+        return $this->back('templates');
+    }
+
+    /** Sends the template, rendered with sample data, to the current user. */
+    public function test(int $id): Response
+    {
+        $this->authorize('templates.manage');
+        $tpl = $this->find($id);
+        $tenant = $this->tenant();
+        try {
+            $target = Notifier::sendTest($tpl, $tenant, \App\Auth\Auth::user());
+            $ok = true;
+            $msg = 'Η δοκιμαστική αποστολή έγινε: ' . $target;
+        } catch (\Throwable $e) {
+            $ok = false;
+            $msg = 'Αποτυχία δοκιμαστικής αποστολής: ' . $e->getMessage();
+        }
+        if ($this->req->wantsJson()) {
+            return $this->json(['ok' => $ok, 'message' => $msg], $ok ? 200 : 422);
+        }
+        $this->flash($ok ? 'success' : 'error', $msg);
+        return $this->back('templates');
     }
 
     public function create(): Response
@@ -28,7 +118,7 @@ final class TemplateController extends Controller
         if (!isset(Notifier::EVENTS[$event])) {
             $event = 'failed';
         }
-        if (!isset(Notifier::CHANNELS[$channel])) {
+        if (!isset(Notifier::TEMPLATE_CHANNELS[$channel])) {
             $channel = 'email';
         }
         [$subject, $body] = Notifier::DEFAULTS[$event][$channel];
@@ -63,7 +153,7 @@ final class TemplateController extends Controller
         if (!isset(Notifier::EVENTS[$event])) {
             $errors[] = 'Άγνωστο γεγονός.';
         }
-        if (!isset(Notifier::CHANNELS[$channel])) {
+        if (!isset(Notifier::TEMPLATE_CHANNELS[$channel])) {
             $errors[] = 'Άγνωστο κανάλι.';
         }
         $name = mb_substr((string) $this->req->input('name', ''), 0, 120);

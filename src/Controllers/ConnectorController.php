@@ -15,8 +15,34 @@ final class ConnectorController extends Controller
     public function index(): Response
     {
         $this->authorize('connectors.manage');
-        $rows = $this->db->all('SELECT id, type, name, is_default, last_test_at, last_test_ok, last_test_error, updated_at FROM connectors WHERE tenant_id = ? ORDER BY type, name', [$this->tenantId()]);
-        return $this->view('connectors/index', ['title' => 'Connectors', 'nav' => 'connectors', 'rows' => $rows]);
+        $tid = $this->tenantId();
+        $type = (string) $this->req->query('type', '');
+        $q = (string) $this->req->query('q', '');
+        $sql = 'SELECT c.id, c.type, c.name, c.is_default, c.last_test_at, c.last_test_ok, c.last_test_error, c.updated_at,
+                    (SELECT COUNT(*) FROM jobs j WHERE j.email_connector_id = c.id OR j.telegram_connector_id = c.id) AS pinned_jobs,
+                    (SELECT COUNT(*) FROM notification_log n WHERE n.tenant_id = c.tenant_id AND n.target LIKE CONCAT(\'%\', c.name, \'%\') AND n.created_at > UTC_TIMESTAMP() - INTERVAL 7 DAY) AS sent_7d
+                FROM connectors c WHERE c.tenant_id = :tid';
+        $p = ['tid' => $tid];
+        if (isset(Connectors::TYPES[$type])) {
+            $sql .= ' AND c.type = :type';
+            $p['type'] = $type;
+        } else {
+            $type = '';
+        }
+        if ($q !== '') {
+            $sql .= ' AND c.name LIKE :q';
+            $p['q'] = '%' . $q . '%';
+        }
+        $rows = $this->db->all($sql . ' ORDER BY FIELD(c.type, \'' . implode("','", array_keys(Connectors::TYPES)) . '\'), c.is_default DESC, c.name', $p);
+        $counts = array_column($this->db->all('SELECT type, COUNT(*) AS n FROM connectors WHERE tenant_id = ? GROUP BY type', [$tid]), 'n', 'type');
+        $usedChannels = array_column($this->db->all(
+            'SELECT n.channel, COUNT(DISTINCT n.job_id) AS jobs FROM job_notifications n JOIN jobs j ON j.id = n.job_id WHERE j.tenant_id = ? GROUP BY n.channel',
+            [$tid],
+        ), 'jobs', 'channel');
+        return $this->view('connectors/index', [
+            'title' => 'Connectors', 'nav' => 'connectors', 'rows' => $rows, 'type' => $type, 'q' => $q,
+            'counts' => $counts, 'usedChannels' => $usedChannels,
+        ]);
     }
 
     public function create(): Response
@@ -94,7 +120,7 @@ final class ConnectorController extends Controller
             return $this->redirect('connectors/new?type=' . $type);
         }
         $default = $this->req->input('is_default') ? 1 : 0;
-        $channel = $type === 'telegram' ? 'telegram' : 'email';
+        $channel = Connectors::channelOf($type);
         if (!Connectors::default($tid, $channel)) {
             $default = 1;
         }
@@ -132,8 +158,9 @@ final class ConnectorController extends Controller
 
     private function clearOtherDefaults(int $id, string $type): void
     {
-        $types = $type === 'telegram' ? "'telegram'" : "'smtp','m365'";
-        $this->db->exec("UPDATE connectors SET is_default = 0 WHERE tenant_id = ? AND id <> ? AND type IN ($types)", [$this->tenantId(), $id]);
+        $types = Connectors::typesFor(Connectors::channelOf($type));
+        $in = implode(',', array_fill(0, count($types), '?'));
+        $this->db->exec("UPDATE connectors SET is_default = 0 WHERE tenant_id = ? AND id <> ? AND type IN ($in)", array_merge([$this->tenantId(), $id], $types));
     }
 
     public function delete(int $id): Response
@@ -148,11 +175,38 @@ final class ConnectorController extends Controller
         return $this->redirect('connectors');
     }
 
+    public function makeDefault(int $id): Response
+    {
+        $this->authorize('connectors.manage');
+        $conn = $this->find($id);
+        $this->db->update('connectors', ['is_default' => 1], 'id = :id', ['id' => $id]);
+        $this->clearOtherDefaults($id, $conn['type']);
+        Audit::log('connector.updated', 'connector', $id, $conn['name'] . ' → προεπιλογή');
+        $this->flash('success', '«' . $conn['name'] . '» είναι πλέον ο προεπιλεγμένος connector.');
+        return $this->redirect('connectors');
+    }
+
+    public function duplicate(int $id): Response
+    {
+        $this->authorize('connectors.manage');
+        $conn = $this->find($id);
+        $newId = $this->db->insert('connectors', [
+            'tenant_id' => $this->tenantId(), 'type' => $conn['type'], 'name' => mb_substr($conn['name'] . ' (αντίγραφο)', 0, 120),
+            'config_enc' => $conn['config_enc'], 'is_default' => 0,
+        ]);
+        Audit::log('connector.created', 'connector', $newId, $conn['name'] . ' (αντίγραφο)');
+        $this->flash('success', 'Δημιουργήθηκε αντίγραφο. Άλλαξε τα στοιχεία που χρειάζεται.');
+        return $this->redirect("connectors/$newId/edit");
+    }
+
     public function test(int $id): Response
     {
         $this->authorize('connectors.manage');
         $conn = $this->find($id);
         $target = trim((string) $this->req->input('target', ''));
+        if ($target === '' && in_array($conn['type'], ['smtp', 'm365'], true)) {
+            $target = (string) \App\Auth\Auth::user()['email'];
+        }
         try {
             Connectors::test($conn, $this->tenant(), $target);
             $this->db->update('connectors', ['last_test_at' => $this->db->now(), 'last_test_ok' => 1, 'last_test_error' => null], 'id = :id', ['id' => $id]);
@@ -167,6 +221,6 @@ final class ConnectorController extends Controller
             return $this->json(['ok' => $ok, 'message' => $msg], $ok ? 200 : 422);
         }
         $this->flash($ok ? 'success' : 'error', $msg);
-        return $this->redirect("connectors/$id/edit");
+        return $this->req->input('from') === 'list' ? $this->redirect('connectors') : $this->redirect("connectors/$id/edit");
     }
 }

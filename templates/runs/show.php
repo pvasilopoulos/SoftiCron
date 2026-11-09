@@ -18,6 +18,9 @@ $triggers = ['schedule' => 'Προγραμματισμένη', 'manual' => 'Χε
     <p class="sub"><a href="<?= e(url('jobs/' . $run['job_id'] . '/edit')) ?>"><?= e($run['job_name']) ?></a></p>
   </div>
   <div class="row">
+    <?php if ($prevId): ?><a class="btn btn-icon" href="<?= e(url('runs/' . $prevId)) ?>" title="Προηγούμενη εκτέλεση του job" aria-label="Προηγούμενη εκτέλεση"><?= icon('chevron-left', 18) ?></a><?php endif; ?>
+    <?php if ($nextId): ?><a class="btn btn-icon" href="<?= e(url('runs/' . $nextId)) ?>" title="Επόμενη εκτέλεση του job" aria-label="Επόμενη εκτέλεση"><?= icon('chevron-right', 18) ?></a><?php endif; ?>
+    <a class="btn" href="<?= e(url('runs', ['job' => $run['job_id']])) ?>">Όλες του job</a>
     <a class="btn" href="<?= e(url('jobs/' . $run['job_id'] . '/edit')) ?>">Άνοιγμα job</a>
     <?php if ($canRun && !$live): ?>
       <form method="post" action="<?= e(url('runs/' . $run['id'] . '/retry')) ?>" class="inline" data-loading>
@@ -84,11 +87,11 @@ $triggers = ['schedule' => 'Προγραμματισμένη', 'manual' => 'Χε
       </div>
     </section>
     <section class="card stack-sm">
-      <h2>Ειδοποιήσεις που στάλθηκαν</h2>
+      <div class="row between"><h2>Ειδοποιήσεις που στάλθηκαν</h2><?php if ($notifications): ?><a class="small" href="<?= e(url('notifications/history', ['run' => $run['id']])) ?>">Λεπτομέρειες</a><?php endif; ?></div>
       <?php if (!$notifications): ?><p class="small muted">Καμία.</p><?php endif; ?>
       <?php foreach ($notifications as $n): ?>
         <div class="list-item small">
-          <span class="badge <?= $n['status'] === 'sent' ? 'ok' : 'fail' ?>"><?= $n['status'] === 'sent' ? '✓' : '✗' ?> <?= e(Notifier::CHANNELS[$n['channel']] ?? $n['channel']) ?></span>
+          <span class="badge <?= $n['status'] === 'sent' ? 'ok' : ($n['status'] === 'skipped' ? 'off' : 'fail') ?>"><?= $n['status'] === 'sent' ? '✓' : ($n['status'] === 'skipped' ? '–' : '✗') ?> <?= e(Notifier::CHANNELS[$n['channel']] ?? $n['channel']) ?></span>
           <span class="grow"><?= e(Notifier::EVENTS[$n['event']] ?? $n['event']) ?> · <?= e($n['target']) ?><?php if ($n['error']): ?><br><span class="xs" style="color:var(--fail-fg)"><?= e($n['error']) ?></span><?php endif; ?></span>
         </div>
       <?php endforeach; ?>

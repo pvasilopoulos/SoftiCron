@@ -75,7 +75,7 @@ final class PushSender
      */
     public static function sendToSubscriptions(array $subscriptionIds, array $payload, bool $includeDisabled = false): array
     {
-        $out = ['sent' => 0, 'failed' => 0, 'errors' => []];
+        $out = ['sent' => 0, 'failed' => 0, 'errors' => [], 'sent_ids' => []];
         if (!self::configured()) {
             $out['errors'][] = 'Τα κλειδιά VAPID δεν έχουν ρυθμιστεί.';
             return $out;
@@ -134,6 +134,9 @@ final class PushSender
             $sub = $byEndpoint[$endpoint] ?? null;
             if ($report->isSuccess()) {
                 $out['sent']++;
+                if ($sub) {
+                    $out['sent_ids'][] = (int) $sub['id'];
+                }
                 if ($sub) {
                     $db->update('push_subscriptions', ['last_success_at' => $db->now()], 'id = :id', ['id' => $sub['id']]);
                 }

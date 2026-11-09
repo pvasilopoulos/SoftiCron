@@ -24,7 +24,7 @@ $val = fn (string $k) => old($k, $tpl[$k] ?? '');
         <select class="select" name="event"><?php foreach (Notifier::EVENTS as $k => $l): ?><option value="<?= $k ?>" <?= $val('event') === $k ? 'selected' : '' ?>><?= e($l) ?></option><?php endforeach; ?></select>
       </label>
       <label class="field">Κανάλι
-        <select class="select" name="channel" data-channel><?php foreach (Notifier::CHANNELS as $k => $l): ?><option value="<?= $k ?>" <?= $val('channel') === $k ? 'selected' : '' ?>><?= e($l) ?></option><?php endforeach; ?></select>
+        <select class="select" name="channel" data-channel><?php foreach (Notifier::TEMPLATE_CHANNELS as $k => $l): ?><option value="<?= $k ?>" <?= $val('channel') === $k ? 'selected' : '' ?>><?= e($l) ?></option><?php endforeach; ?></select>
       </label>
     </div>
     <label class="field" data-subject>Θέμα (email) / Τίτλος (push)

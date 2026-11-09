@@ -8,6 +8,12 @@ $tz = Auth::tenant()['timezone'];
 <div class="page-head">
   <div><h1>Ειδοποιήσεις</h1><p class="sub">Push ειδοποιήσεις στο κινητό και στον υπολογιστή σου, ακόμα και με την εφαρμογή κλειστή</p></div>
 </div>
+<?php if (Auth::can('runs.view')): ?>
+  <nav class="tabs" aria-label="Ειδοποιήσεις">
+    <a class="on" href="<?= e(url('notifications')) ?>" aria-current="page">Συσκευές & προτιμήσεις</a>
+    <a href="<?= e(url('notifications/history')) ?>">Ιστορικό</a>
+  </nav>
+<?php endif; ?>
 
 <div class="split">
   <div class="stack" style="min-width:0">

@@ -96,9 +96,6 @@ echo App\Core\View::partial('partials/head', ['title' => $title ?? '']);
       <div class="grow"></div>
       <button class="btn btn-icon" type="button" data-theme-toggle aria-label="Αλλαγή θέματος" title="Φωτεινό / σκοτεινό θέμα"><?= icon('moon') ?></button>
       <a class="btn btn-icon" href="<?= e(url('notifications')) ?>" aria-label="Ειδοποιήσεις" title="Ειδοποιήσεις"><?= icon('bell') ?></a>
-      <?php if (Auth::can('jobs.manage')): ?>
-        <a class="btn btn-primary" href="<?= e(url('jobs/new')) ?>"><?= icon('plus', 16) ?>Νέο job</a>
-      <?php endif; ?>
     </div>
     <main class="content" id="content">
       <?php foreach (Session::takeFlash() as $f): ?>

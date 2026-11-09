@@ -33,6 +33,7 @@ return static function (RouteCollector $r): void {
 
     // Runs
     $r->get('/runs', [C\RunController::class, 'index']);
+    $r->get('/runs/export', [C\RunController::class, 'export']);
     $r->get('/runs/{id:\d+}', [C\RunController::class, 'show']);
     $r->post('/runs/{id:\d+}/retry', [C\RunController::class, 'retry']);
 
@@ -44,6 +45,8 @@ return static function (RouteCollector $r): void {
     $r->post('/connectors/{id:\d+}', [C\ConnectorController::class, 'update']);
     $r->post('/connectors/{id:\d+}/delete', [C\ConnectorController::class, 'delete']);
     $r->post('/connectors/{id:\d+}/test', [C\ConnectorController::class, 'test']);
+    $r->post('/connectors/{id:\d+}/default', [C\ConnectorController::class, 'makeDefault']);
+    $r->post('/connectors/{id:\d+}/duplicate', [C\ConnectorController::class, 'duplicate']);
 
     // Message templates
     $r->get('/templates', [C\TemplateController::class, 'index']);
@@ -53,9 +56,14 @@ return static function (RouteCollector $r): void {
     $r->get('/templates/{id:\d+}/edit', [C\TemplateController::class, 'edit']);
     $r->post('/templates/{id:\d+}', [C\TemplateController::class, 'update']);
     $r->post('/templates/{id:\d+}/delete', [C\TemplateController::class, 'delete']);
+    $r->post('/templates/{id:\d+}/duplicate', [C\TemplateController::class, 'duplicate']);
+    $r->post('/templates/{id:\d+}/default', [C\TemplateController::class, 'makeDefault']);
+    $r->post('/templates/{id:\d+}/reset', [C\TemplateController::class, 'reset']);
+    $r->post('/templates/{id:\d+}/test', [C\TemplateController::class, 'test']);
 
     // Notifications (devices / preferences)
     $r->get('/notifications', [C\NotificationController::class, 'index']);
+    $r->get('/notifications/history', [C\NotificationController::class, 'history']);
     $r->post('/notifications/prefs', [C\NotificationController::class, 'savePrefs']);
     $r->post('/notifications/subscribe', [C\NotificationController::class, 'subscribe']);
     $r->post('/notifications/unsubscribe', [C\NotificationController::class, 'unsubscribe']);
@@ -84,6 +92,7 @@ return static function (RouteCollector $r): void {
 
     // Audit, settings, profile
     $r->get('/audit', [C\AuditController::class, 'index']);
+    $r->get('/audit/export', [C\AuditController::class, 'export']);
     $r->get('/settings', [C\SettingsController::class, 'index']);
     $r->post('/settings', [C\SettingsController::class, 'update']);
     $r->post('/settings/branding', [C\SettingsController::class, 'branding']);

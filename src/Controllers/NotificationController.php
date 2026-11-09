@@ -27,6 +27,70 @@ final class NotificationController extends Controller
         ]);
     }
 
+    /** Detailed log of every notification sent / failed / skipped. */
+    public function history(): Response
+    {
+        $this->authorize('runs.view');
+        $tid = $this->tenantId();
+        $f = [
+            'channel' => (string) $this->req->query('channel', ''),
+            'status' => (string) $this->req->query('status', ''),
+            'event' => (string) $this->req->query('event', ''),
+            'job' => (int) $this->req->query('job', 0),
+            'run' => (int) $this->req->query('run', 0),
+            'from' => (string) $this->req->query('from', ''),
+            'to' => (string) $this->req->query('to', ''),
+            'q' => (string) $this->req->query('q', ''),
+        ];
+        $where = 'FROM notification_log n LEFT JOIN jobs j ON j.id = n.job_id WHERE n.tenant_id = :tid';
+        $p = ['tid' => $tid];
+        if (in_array($f['channel'], ['email', 'telegram', 'push'], true)) {
+            $where .= ' AND n.channel = :ch';
+            $p['ch'] = $f['channel'];
+        }
+        if (in_array($f['status'], ['sent', 'failed', 'skipped'], true)) {
+            $where .= ' AND n.status = :st';
+            $p['st'] = $f['status'];
+        }
+        if (isset(Notifier::EVENTS[$f['event']])) {
+            $where .= ' AND n.event = :ev';
+            $p['ev'] = $f['event'];
+        }
+        if ($f['job']) {
+            $where .= ' AND n.job_id = :job';
+            $p['job'] = $f['job'];
+        }
+        if ($f['run']) {
+            $where .= ' AND n.run_id = :run';
+            $p['run'] = $f['run'];
+        }
+        $tz = new \DateTimeZone($this->tenant()['timezone']);
+        foreach (['from' => '00:00:00', 'to' => '23:59:59'] as $k => $time) {
+            if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $f[$k])) {
+                $utc = (new \DateTimeImmutable($f[$k] . ' ' . $time, $tz))->setTimezone(new \DateTimeZone('UTC'))->format('Y-m-d H:i:s');
+                $where .= $k === 'from' ? ' AND n.created_at >= :from' : ' AND n.created_at <= :to';
+                $p[$k] = $utc;
+            } else {
+                $f[$k] = '';
+            }
+        }
+        if ($f['q'] !== '') {
+            $where .= ' AND (n.target LIKE :q OR n.subject LIKE :q2 OR n.error LIKE :q3)';
+            $p['q'] = $p['q2'] = $p['q3'] = '%' . $f['q'] . '%';
+        }
+        $page = $this->paginate($where, $p, 'n.*, j.name AS job_name', 'n.id DESC', 40);
+        $stats = $this->db->all(
+            "SELECT channel, SUM(status = 'sent') AS sent, SUM(status = 'failed') AS failed, SUM(status = 'skipped') AS skipped
+             FROM notification_log WHERE tenant_id = ? AND created_at >= ? GROUP BY channel",
+            [$tid, gmdate('Y-m-d H:i:s', time() - 7 * 86400)],
+        );
+        $jobs = $this->db->all('SELECT id, name FROM jobs WHERE tenant_id = ? ORDER BY name', [$tid]);
+        return $this->view('notifications/history', [
+            'title' => 'Ιστορικό ειδοποιήσεων', 'nav' => 'notifications', 'page' => $page, 'f' => $f,
+            'stats' => array_column($stats, null, 'channel'), 'jobs' => $jobs,
+        ]);
+    }
+
     public function savePrefs(): Response
     {
         $tid = $this->tenantId();

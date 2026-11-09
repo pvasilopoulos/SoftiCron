@@ -32,6 +32,30 @@ final class Response
         return new self('', $status, ['Location' => $to]);
     }
 
+    /** CSV download (UTF-8 with BOM so Excel shows Greek correctly, ; separator). */
+    public static function csv(string $filename, array $header, iterable $rows): self
+    {
+        $fh = fopen('php://temp', 'r+');
+        fwrite($fh, "\xEF\xBB\xBF");
+        fputcsv($fh, $header, ';');
+        foreach ($rows as $row) {
+            $row = array_map(function ($v) {
+                $v = (string) ($v ?? '');
+                // Prevent CSV formula injection in spreadsheets.
+                return preg_match('/^[=+\-@\t\r]/', $v) ? "'" . $v : $v;
+            }, $row);
+            fputcsv($fh, $row, ';');
+        }
+        rewind($fh);
+        $body = (string) stream_get_contents($fh);
+        fclose($fh);
+        return new self($body, 200, [
+            'Content-Type' => 'text/csv; charset=utf-8',
+            'Content-Disposition' => 'attachment; filename="' . preg_replace('/[^A-Za-z0-9._-]/', '_', $filename) . '"',
+            'Cache-Control' => 'no-store',
+        ]);
+    }
+
     public static function file(string $path, string $mime): self
     {
         return new self((string) file_get_contents($path), 200, [
