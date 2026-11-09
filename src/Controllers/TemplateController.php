@@ -15,7 +15,7 @@ final class TemplateController extends Controller
 {
     public function index(): Response
     {
-        $this->authorize('templates.manage');
+        $this->authorize('templates.view');
         Notifier::seedTemplates($this->tenantId()); // adds templates for newly introduced channels
         $f = [
             'event' => (string) $this->req->query('event', ''),
@@ -92,7 +92,7 @@ final class TemplateController extends Controller
     /** Sends the template, rendered with sample data, to the current user. */
     public function test(int $id): Response
     {
-        $this->authorize('templates.manage');
+        $this->authorize('templates.test');
         $tpl = $this->find($id);
         $tenant = $this->tenant();
         try {
@@ -139,7 +139,7 @@ final class TemplateController extends Controller
 
     public function edit(int $id): Response
     {
-        $this->authorize('templates.manage');
+        $this->authorize('templates.view');
         $tpl = $this->find($id);
         return $this->view('templates/form', ['title' => $tpl['name'], 'nav' => 'templates', 'tpl' => $tpl]);
     }
@@ -233,7 +233,7 @@ final class TemplateController extends Controller
 
     public function preview(): Response
     {
-        $this->authorize('templates.manage');
+        $this->authorize('templates.test');
         $ctx = TemplateRenderer::sampleContext();
         $ctx['tenant']['name'] = $this->tenant()['name'];
         $channel = (string) $this->req->input('channel', 'email');

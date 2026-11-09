@@ -16,12 +16,19 @@ use FastRoute\Dispatcher;
 
 App::boot(dirname(__DIR__));
 $request = new Request();
-Session::start($request->isSecure());
+// Machine endpoints (heartbeat pings, REST API, public status page) are stateless: no session, no CSRF.
+$stateless = (bool) preg_match('#^/(ping|api/v1|status)(/|$)#', $request->path);
+$api = (bool) preg_match('#^/api/v1(/|$)#', $request->path);
+if (!$stateless) {
+    Session::start($request->isSecure());
+}
 
 $dispatcher = FastRoute\simpleDispatcher(require App::$root . '/config/routes.php');
 
 try {
-    $route = $dispatcher->dispatch($request->method === 'GET' || $request->method === 'HEAD' ? 'GET' : 'POST', $request->path);
+    // The REST API routes on the real HTTP method; HTML forms only use GET/POST (with _method override).
+    $httpMethod = $request->method === 'HEAD' ? 'GET' : $request->method;
+    $route = $dispatcher->dispatch($api ? $httpMethod : ($httpMethod === 'GET' ? 'GET' : 'POST'), $request->path);
     switch ($route[0]) {
         case Dispatcher::NOT_FOUND:
             throw HttpException::notFound();
@@ -30,7 +37,7 @@ try {
     }
     [, [$class, $method], $vars] = $route;
 
-    if ($request->method !== 'GET' && $request->method !== 'HEAD') {
+    if (!$stateless && $request->method !== 'GET' && $request->method !== 'HEAD') {
         $token = $_POST['_csrf'] ?? ($_SERVER['HTTP_X_CSRF_TOKEN'] ?? null);
         if (!Csrf::check(is_string($token) ? $token : null)) {
             throw new HttpException(419, 'Η φόρμα έληξε. Ανανέωσε τη σελίδα και δοκίμασε ξανά.');
@@ -50,8 +57,8 @@ try {
 } catch (HttpException $e) {
     if ($e->redirect !== null) {
         $response = Response::redirect($e->redirect);
-    } elseif ($request->wantsJson()) {
-        $response = Response::json(['error' => $e->getMessage()], $e->status);
+    } elseif ($api || $request->wantsJson()) {
+        $response = Response::json(['error' => $e->getMessage() ?: 'Σφάλμα', 'status' => $e->status], $e->status);
     } else {
         $response = Response::html(View::render('errors/error', [
             'status' => $e->status,
@@ -61,8 +68,8 @@ try {
 } catch (Throwable $e) {
     App::log('Unhandled: ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine());
     $msg = \App\Core\Env::bool('APP_DEBUG') ? $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine() : 'Κάτι πήγε στραβά. Το σφάλμα καταγράφηκε.';
-    if ($request->wantsJson()) {
-        $response = Response::json(['error' => $msg], 500);
+    if ($api || $request->wantsJson()) {
+        $response = Response::json(['error' => $msg, 'status' => 500], 500);
     } else {
         try {
             $response = Response::html(View::render('errors/error', ['status' => 500, 'message' => $msg], 'auth_layout'), 500);

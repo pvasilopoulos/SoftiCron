@@ -80,7 +80,7 @@ final class TemplateRenderer
                 'timestamp' => $scheduled->getTimestamp(),
             ],
             'now' => $now->format(DATE_ATOM),
-        ];
+        ] + Variables::context((int) $tenant['id']);
     }
 
     public static function sampleContext(): array

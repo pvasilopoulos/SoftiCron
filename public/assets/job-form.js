@@ -72,6 +72,67 @@
   }));
   renderBody();
 
+  // ---- Email recipients as chips ----
+  const ec = form.querySelector('[data-email-chips]');
+  if (ec) {
+    const hidden = ec.querySelector('input[name="notify_emails"]');
+    const input = ec.querySelector('#notify-emails-input');
+    const box = ec.querySelector('[data-chips]');
+    const valid = (s) => /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/.test(s);
+    let list = hidden.value.split(/[,;\s]+/).map((s) => s.trim()).filter(Boolean);
+    const render = () => {
+      hidden.value = list.join(', ');
+      box.innerHTML = '';
+      list.forEach((em, i) => {
+        const c = document.createElement('span');
+        c.className = 'email-chip' + (valid(em) ? '' : ' bad');
+        c.textContent = em;
+        const x = document.createElement('button');
+        x.type = 'button'; x.textContent = '×'; x.setAttribute('aria-label', 'Αφαίρεση ' + em);
+        x.addEventListener('click', () => { list.splice(i, 1); render(); });
+        c.appendChild(x);
+        box.appendChild(c);
+      });
+      ec.querySelector('[data-default-emails]').classList.toggle('hidden', list.length > 0);
+    };
+    const add = (raw) => {
+      raw.split(/[,;\s]+/).map((s) => s.trim().toLowerCase()).filter(Boolean).forEach((em) => {
+        if (!valid(em)) { window.toast('Μη έγκυρο email: ' + em, 'error'); return; }
+        if (!list.includes(em)) list.push(em);
+      });
+      input.value = '';
+      render();
+    };
+    input.addEventListener('keydown', (e) => {
+      if (['Enter', ',', ';', ' ', 'Tab'].includes(e.key) && input.value.trim() !== '') { e.preventDefault(); add(input.value); }
+      else if (e.key === 'Backspace' && input.value === '' && list.length) { list.pop(); render(); }
+    });
+    input.addEventListener('change', () => { if (input.value.trim()) add(input.value); });
+    input.addEventListener('blur', () => { if (input.value.trim()) add(input.value); });
+    ec.querySelectorAll('[data-add-email]').forEach((b) => b.addEventListener('click', () => add(b.dataset.addEmail)));
+    render();
+  }
+
+  // ---- Job type (HTTP / Heartbeat) ----
+  const syncType = () => {
+    const t = form.querySelector('[data-job-type]:checked')?.value || form.querySelector('input[name="type"]')?.value || 'http';
+    document.querySelectorAll('[data-type-only]').forEach((el) => el.classList.toggle('hidden', el.dataset.typeOnly !== t));
+    document.querySelectorAll('[data-test-run], [data-run-now]').forEach((el) => el.classList.toggle('hidden', t === 'heartbeat'));
+    const url = form.querySelector('input[name="url"]');
+    if (url) url.required = t !== 'heartbeat';
+  };
+  form.querySelectorAll('[data-job-type]').forEach((r) => r.addEventListener('change', syncType));
+  syncType();
+
+  // ---- Auth type ----
+  const authSel = form.querySelector('[data-auth-type]');
+  authSel?.addEventListener('change', () => {
+    form.querySelectorAll('[data-auth-fields]').forEach((el) => {
+      const t = el.dataset.authFields;
+      el.classList.toggle('hidden', !(t === authSel.value || t === authSel.value + '-note'));
+    });
+  });
+
   // ---- Push recipients ----
   const pt = form.querySelector('[data-push-targets]');
   if (pt) {

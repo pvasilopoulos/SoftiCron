@@ -1,14 +1,23 @@
 <?php
 /** @var array $tenant @var array $settings */
+use App\Auth\Auth;
 use App\Services\CronHelper;
 
 $logoUrl = $tenant['logo_path'] ? url('branding/' . $tenant['id'] . '/logo') . '?v=' . rawurlencode((string) $tenant['logo_path']) : null;
+$cGen = Auth::can('settings.manage');
+$cNot = Auth::can('settings.notifications');
+$cRep = Auth::can('settings.reports');
+$cBrand = Auth::can('settings.branding');
+$cStatus = Auth::can('settings.status_page');
+$cMenu = Auth::can('settings.menu');
 ?>
 <div class="page-head"><div><h1>Ρυθμίσεις</h1><p class="sub">Ρυθμίσεις του οργανισμού <?= e($tenant['name']) ?></p></div></div>
 
 <div class="split">
+  <?php if ($cGen || $cNot || $cRep): ?>
   <form method="post" action="<?= e(url('settings')) ?>" class="card stack">
     <?= csrf_field() ?>
+    <?php if ($cGen): ?>
     <h2>Γενικά</h2>
     <div class="form-grid">
       <label class="field">Όνομα οργανισμού<input class="input" name="name" value="<?= e($tenant['name']) ?>" required maxlength="150"></label>
@@ -17,6 +26,8 @@ $logoUrl = $tenant['logo_path'] ? url('branding/' . $tenant['id'] . '/logo') . '
         <span class="help">Προεπιλογή για νέα jobs και για την εμφάνιση ωρών</span>
       </label>
     </div>
+    <?php endif; ?>
+    <?php if ($cNot): ?>
     <h2 style="margin-top:8px">Ειδοποιήσεις</h2>
     <label class="field">Προεπιλεγμένοι παραλήπτες email
       <input class="input" name="notify_emails" value="<?= e($settings['notify.emails'] ?? '') ?>" placeholder="ops@example.gr, it@example.gr">
@@ -39,6 +50,19 @@ $logoUrl = $tenant['logo_path'] ? url('branding/' . $tenant['id'] . '/logo') . '
         <span class="help">Προστασία του υπολοίπου σου στη Routee. 0 = χωρίς όριο. Σήμερα: <?= App\Services\Notifier::smsSentToday((int) $tenant['id']) ?></span>
       </label>
     </div>
+    <div class="stack-sm" style="padding:12px;border:1px solid var(--border);border-radius:12px">
+      <label class="check"><input type="checkbox" name="quiet_enabled" value="1" <?= ($settings['notify.quiet_enabled'] ?? '') === '1' ? 'checked' : '' ?>>Ώρες ησυχίας</label>
+      <div class="row small" style="gap:8px">από <input class="input" type="time" name="quiet_from" value="<?= e($settings['notify.quiet_from'] ?? '23:00') ?>" style="width:auto;min-height:36px"> έως <input class="input" type="time" name="quiet_to" value="<?= e($settings['notify.quiet_to'] ?? '07:00') ?>" style="width:auto;min-height:36px"></div>
+      <span class="xs muted">Μέσα σε αυτές τις ώρες στέλνονται μόνο οι αποτυχίες και οι κλιμακώσεις. Ανακάμψεις, αργές αποκρίσεις και επιτυχίες καταγράφονται ως «παραλείφθηκε».</span>
+    </div>
+    <?php endif; ?>
+    <?php if ($cRep): ?>
+    <h2 style="margin-top:8px">Εβδομαδιαία αναφορά</h2>
+    <label class="check"><input type="checkbox" name="weekly_enabled" value="1" <?= ($settings['reports.weekly_enabled'] ?? '') === '1' ? 'checked' : '' ?>>Αποστολή αναφοράς διαθεσιμότητας κάθε Δευτέρα 08:00</label>
+    <label class="field">Παραλήπτες αναφοράς <span class="help">Κενό = οι προεπιλεγμένοι παραλήπτες email</span>
+      <input class="input" name="weekly_emails" value="<?= e($settings['reports.weekly_emails'] ?? '') ?>" placeholder="manager@example.gr">
+    </label>
+    <?php endif; ?>
     <h2 style="margin-top:8px">Όρια πλάνου</h2>
     <div class="kv">
       <div><span class="k">Μέγιστα jobs</span><span class="v"><?= (int) $tenant['max_jobs'] ?></span></div>
@@ -47,7 +71,9 @@ $logoUrl = $tenant['logo_path'] ? url('branding/' . $tenant['id'] . '/logo') . '
     </div>
     <div class="form-actions"><button class="btn btn-primary" type="submit">Αποθήκευση</button></div>
   </form>
+  <?php endif; ?>
 
+  <?php if ($cBrand): ?>
   <form method="post" action="<?= e(url('settings/branding')) ?>" enctype="multipart/form-data" class="card stack">
     <?= csrf_field() ?>
     <h2>Branding</h2>
@@ -72,8 +98,33 @@ $logoUrl = $tenant['logo_path'] ? url('branding/' . $tenant['id'] . '/logo') . '
     </label>
     <div class="form-actions"><button class="btn btn-primary" type="submit">Αποθήκευση branding</button></div>
   </form>
+  <?php endif; ?>
 </div>
-<?php
+<?php if ($cStatus):
+$stSlug = $settings['status.slug'] ?? $tenant['slug'];
+$stOn = ($settings['status.enabled'] ?? '') === '1';
+$stCount = (int) App\Core\App::db()->value('SELECT COUNT(*) FROM jobs WHERE tenant_id = ? AND show_on_status = 1', [$tenant['id']]);
+?>
+<form id="status-page" method="post" action="<?= e(url('settings/status')) ?>" class="card stack">
+  <?= csrf_field() ?>
+  <div class="row between">
+    <div><h2>Δημόσια σελίδα κατάστασης</h2><p class="small muted" style="margin-top:4px">Μια σελίδα για τους πελάτες σου με την κατάσταση των υπηρεσιών και το uptime 90 ημερών, χωρίς τεχνικές λεπτομέρειες.</p></div>
+    <?php if ($stOn): ?><a class="btn" href="<?= e(url('status/' . $stSlug)) ?>" target="_blank" rel="noopener"><?= icon('send', 16) ?>Άνοιγμα σελίδας</a><?php endif; ?>
+  </div>
+  <label class="check"><input type="checkbox" name="enabled" value="1" <?= $stOn ? 'checked' : '' ?>>Ενεργή</label>
+  <div class="form-grid">
+    <label class="field">Διεύθυνση
+      <div class="row" style="gap:4px;flex-wrap:nowrap"><span class="small muted nowrap"><?= e(abs_url('status/')) ?></span><input class="input mono" name="slug" value="<?= e($stSlug) ?>" pattern="[a-z0-9\-]+" maxlength="60"></div>
+    </label>
+    <label class="field">Τίτλος<input class="input" name="title" value="<?= e($settings['status.title'] ?? '') ?>" placeholder="<?= e($tenant['name']) ?>" maxlength="120"></label>
+  </div>
+  <label class="field">Περιγραφή <span class="help">Προαιρετική</span><input class="input" name="description" value="<?= e($settings['status.description'] ?? '') ?>" maxlength="255" placeholder="π.χ. Κατάσταση των online υπηρεσιών της Acme"></label>
+  <p class="xs muted"><?= $stCount ?> jobs εμφανίζονται στη σελίδα. Επίλεξε ποια από τη φόρμα κάθε job → «SLA & σελίδα κατάστασης».</p>
+  <div class="form-actions"><button class="btn btn-primary" type="submit">Αποθήκευση</button></div>
+</form>
+<?php endif; ?>
+
+<?php if ($cMenu):
 $footer = App\Services\BottomNav::configured((int) $tenant['id']);
 $items = App\Services\BottomNav::ITEMS;
 ?>
@@ -107,10 +158,12 @@ $items = App\Services\BottomNav::ITEMS;
     <?php foreach (array_unique(array_merge(array_column($items, 2), ['menu'])) as $ic): ?><span data-ic="<?= e($ic) ?>"><?= icon($ic, 22) ?></span><?php endforeach; ?>
   </template>
 </form>
+<?php endif; ?>
 
 <script>
 document.addEventListener('DOMContentLoaded', () => {
   const fm = document.getElementById('footer-menu');
+  if (fm) {
   const slots = [...fm.querySelectorAll('[data-footer-slot]')];
   const icons = fm.querySelector('[data-footer-icons]').content;
   const iconHtml = (n) => icons.querySelector('[data-ic="' + n + '"]')?.innerHTML || '';
@@ -129,7 +182,9 @@ document.addEventListener('DOMContentLoaded', () => {
     preview();
   });
   preview();
+  }
   const c = document.querySelector('[data-color]'), t = document.querySelector('[data-color-text]');
+  if (!c || !t) return;
   const set = (v) => { c.value = v; t.value = v.toUpperCase(); document.documentElement.style.setProperty('--accent', v); };
   c.addEventListener('input', () => set(c.value));
   t.addEventListener('input', () => { if (/^#[0-9a-f]{6}$/i.test(t.value)) set(t.value); });

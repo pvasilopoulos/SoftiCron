@@ -17,7 +17,7 @@ final class UserController extends Controller
 {
     public function index(): Response
     {
-        $this->authorize('users.manage');
+        $this->authorize('users.view');
         $tid = $this->tenantId();
         $members = $this->db->all(
             'SELECT u.id, u.name, u.email, u.last_login_at, u.status, m.role_id, r.name AS role_name, m.created_at AS joined_at
@@ -138,7 +138,7 @@ final class UserController extends Controller
 
     public function remove(int $userId): Response
     {
-        $this->authorize('users.manage');
+        $this->authorize('users.delete');
         $tid = $this->tenantId();
         $member = $this->db->one('SELECT m.*, u.name, u.email FROM memberships m JOIN users u ON u.id = m.user_id WHERE m.tenant_id = ? AND m.user_id = ?', [$tid, $userId]);
         if (!$member) {
@@ -328,7 +328,7 @@ final class UserController extends Controller
 
     public function revokeInvite(int $id): Response
     {
-        $this->authorize('users.manage');
+        $this->authorize('users.delete');
         $inv = $this->db->one('SELECT * FROM invitations WHERE id = ? AND tenant_id = ?', [$id, $this->tenantId()]);
         if (!$inv) {
             throw HttpException::notFound();

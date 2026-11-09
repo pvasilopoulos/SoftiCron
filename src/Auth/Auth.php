@@ -76,6 +76,18 @@ final class Auth
         Session::set('tid', $tid);
     }
 
+    /** Stateless authentication for the REST API: act as the token's user, limited to its scopes. */
+    public static function actAs(array $user, array $tenant, array $permissions): void
+    {
+        self::$user = $user;
+        self::$tenant = $tenant;
+        self::$perms = $permissions;
+        self::$loaded = true;
+        self::$apiMode = true;
+    }
+
+    private static bool $apiMode = false;
+
     public static function logout(): void
     {
         Session::destroy();
@@ -161,10 +173,20 @@ final class Auth
         if (self::$user === null) {
             return false;
         }
-        if (self::$user['is_super_admin']) {
-            return true;
+        if (self::$user['is_super_admin'] && !self::$apiMode) {
+            return true; // API tokens are always limited to their scopes
         }
         return in_array($permission, self::$perms ?? [], true);
+    }
+
+    public static function canAny(array $permissions): bool
+    {
+        foreach ($permissions as $p) {
+            if (self::can($p)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public static function switchTenant(int $tenantId): bool

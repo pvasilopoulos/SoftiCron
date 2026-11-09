@@ -38,7 +38,7 @@ if ($hasOld) {
     <?php if ($canRun): ?>
       <button class="btn" type="button" data-test-run><?= icon('play', 16) ?>Test run</button>
     <?php endif; ?>
-    <?php if (!$isNew && $canRun): ?>
+    <?php if (!$isNew && $canRun && ($job['type'] ?? 'http') !== 'heartbeat'): ?>
       <form method="post" action="<?= e(url('jobs/' . $job['id'] . '/run')) ?>" class="inline" data-loading>
         <?= csrf_field() ?><button class="btn" type="submit"><?= icon('send', 16) ?>Εκτέλεση τώρα</button>
       </form>
@@ -53,6 +53,7 @@ if ($hasOld) {
   <nav class="tabs" aria-label="Ενότητες job">
     <a class="on" href="<?= e(url('jobs/' . $job['id'] . '/edit')) ?>" aria-current="page">Ρυθμίσεις</a>
     <a href="<?= e(url('runs', ['job' => $job['id']])) ?>">Ιστορικό εκτελέσεων</a>
+    <?php if ($canVersions): ?><a href="<?= e(url('jobs/' . $job['id'] . '/versions')) ?>">Εκδόσεις</a><?php endif; ?>
     <?php if (Auth::can('audit.view')): ?><a href="<?= e(url('audit', ['q' => $job['id']])) ?>">Αλλαγές (audit)</a><?php endif; ?>
   </nav>
 <?php endif; ?>
@@ -82,7 +83,54 @@ if ($hasOld) {
       </label>
     </section>
 
-    <section class="card stack">
+    <?php $jobType = (string) ($job['type'] ?? 'http'); if ($hasOld && $isNew) { $jobType = old('type', $jobType) === 'heartbeat' ? 'heartbeat' : 'http'; } ?>
+    <?php if ($isNew): ?>
+      <section class="card stack-sm">
+        <h2>Τύπος job</h2>
+        <div class="type-grid" role="radiogroup" aria-label="Τύπος job">
+          <label class="type-card"><input type="radio" name="type" value="http" <?= $jobType === 'http' ? 'checked' : '' ?> data-job-type>
+            <span><strong><?= icon('send', 16) ?> HTTP request</strong><span class="xs muted">Η εφαρμογή καλεί ένα URL / webhook με το πρόγραμμα που ορίζεις.</span></span></label>
+          <label class="type-card"><input type="radio" name="type" value="heartbeat" <?= $jobType === 'heartbeat' ? 'checked' : '' ?> data-job-type>
+            <span><strong><?= icon('runs', 16) ?> Heartbeat</strong><span class="xs muted">Το δικό σου script (backup, cron, ERP export) στέλνει ping όταν τελειώνει. Αν δεν έρθει στην ώρα του, ειδοποιείσαι.</span></span></label>
+        </div>
+      </section>
+    <?php else: ?>
+      <input type="hidden" name="type" value="<?= e($jobType) ?>">
+    <?php endif; ?>
+
+    <section class="card stack <?= $jobType === 'heartbeat' ? '' : 'hidden' ?>" data-type-only="heartbeat">
+      <h2>Heartbeat</h2>
+      <?php if ($isNew): ?>
+        <p class="small muted">Τα ping URLs δημιουργούνται μόλις αποθηκεύσεις το job.</p>
+      <?php else: $pingBase = abs_url('ping/' . $job['ping_token']); ?>
+        <div class="stack-sm">
+          <span class="small" style="font-weight:500;color:var(--text-2)">Ping URL (επιτυχία)</span>
+          <div class="row" style="gap:6px;flex-wrap:nowrap"><code class="input mono" style="display:flex;align-items:center;overflow:auto;white-space:nowrap"><?= e($pingBase) ?></code><button class="btn btn-sm" type="button" data-copy="<?= e($pingBase) ?>"><?= icon('copy', 14) ?>Αντιγραφή</button></div>
+          <span class="xs muted">Προαιρετικά: <code><?= e($pingBase) ?>/start</code> στην αρχή (για μέτρηση διάρκειας) και <code><?= e($pingBase) ?>/fail</code> σε αποτυχία. Ό,τι στείλεις στο body (έως 10 KB) αποθηκεύεται ως έξοδος.</span>
+        </div>
+        <details>
+          <summary class="small" style="cursor:pointer;color:var(--accent-text);font-weight:600">Παραδείγματα χρήσης</summary>
+          <pre class="code" style="margin-top:8px"># Linux cron / bash
+/path/backup.sh && curl -fsS -m 10 --retry 3 <?= e($pingBase) ?> > /dev/null \
+                || curl -fsS -m 10 --data "exit $?" <?= e($pingBase) ?>/fail
+
+# PowerShell (Windows Task Scheduler)
+Invoke-RestMethod <?= e($pingBase) ?>
+
+# Με μέτρηση διάρκειας και αποστολή εξόδου
+curl -fsS <?= e($pingBase) ?>/start
+output=$(/path/job.sh 2>&1); code=$?
+curl -fsS --data-raw "$output" <?= e($pingBase) ?><?= '$( [ $code -ne 0 ] && echo /fail )' ?></pre>
+        </details>
+        <?php if (!empty($job['last_ping_at'])): ?><p class="small">Τελευταίο ping: <strong><?= e(rel_time($job['last_ping_at'])) ?></strong> (<?= e(fmt_dt($job['last_ping_at'], $job['timezone'], 'd/m/Y H:i:s')) ?>)</p><?php else: ?><p class="small muted">Δεν έχει έρθει ακόμα ping.</p><?php endif; ?>
+      <?php endif; ?>
+      <label class="field" style="max-width:320px">Περιθώριο καθυστέρησης (λεπτά)
+        <input class="input" type="number" min="1" max="1440" name="grace_minutes" value="<?= e($v('grace_minutes') ?: 5) ?>">
+        <span class="help">Πόσο μετά την αναμενόμενη ώρα (από το πρόγραμμα παρακάτω) θεωρείται ότι το ping χάθηκε.</span>
+      </label>
+    </section>
+
+    <section class="card stack <?= $jobType === 'heartbeat' ? 'hidden' : '' ?>" data-type-only="http">
       <h2>Request</h2>
       <div class="row" style="align-items:flex-end;flex-wrap:wrap">
         <label class="field" style="flex:0 0 120px">Μέθοδος
@@ -121,6 +169,33 @@ if ($hasOld) {
           <button class="btn btn-ghost btn-sm" type="button" data-add-header><?= icon('plus', 14) ?>Προσθήκη header</button>
           <span class="xs muted">Τα headers αποθηκεύονται κρυπτογραφημένα. Τα «μυστικά» δεν εμφανίζονται ξανά.</span>
         </div>
+      </div>
+
+      <div class="stack-sm" data-auth>
+        <?php $authType = (string) ($v('auth_type') ?: 'none'); ?>
+        <div class="row between">
+          <span class="small" style="font-weight:500;color:var(--text-2)">Ταυτοποίηση (Auth)</span>
+          <label class="sr-only" for="auth-type">Τύπος ταυτοποίησης</label>
+          <select id="auth-type" class="select" name="auth_type" style="width:auto;min-height:36px" data-auth-type>
+            <?php foreach (App\Services\JobAuth::TYPES as $k => $l): ?><option value="<?= $k ?>" <?= $authType === $k ? 'selected' : '' ?>><?= e($l) ?></option><?php endforeach; ?>
+          </select>
+        </div>
+        <?php foreach (App\Services\JobAuth::FIELDS as $t => $fields): ?>
+          <div class="form-grid <?= $authType === $t ? '' : 'hidden' ?>" data-auth-fields="<?= $t ?>">
+            <?php foreach ($fields as $key => [$label, $input, $secret, $help]):
+                $cur = $authType === $t ? (string) ($authCfg[$key] ?? '') : ''; ?>
+              <label class="field"><?= e($label) ?>
+                <?php if (str_starts_with($input, 'select:')): $opts = []; foreach (explode(',', substr($input, 7)) as $o) { [$ok, $ol] = explode('=', $o); $opts[$ok] = $ol; } ?>
+                  <select class="select" name="auth[<?= e($key) ?>]"><?php foreach ($opts as $ok => $ol): ?><option value="<?= e($ok) ?>" <?= $cur === $ok ? 'selected' : '' ?>><?= e($ol) ?></option><?php endforeach; ?></select>
+                <?php else: ?>
+                  <input class="input mono" type="<?= $secret ? 'password' : ($input === 'url' ? 'url' : 'text') ?>" name="auth[<?= e($key) ?>]" value="<?= $secret ? '' : e($cur) ?>" <?= $secret && $cur !== '' ? 'placeholder="•••••••• (αμετάβλητο)"' : '' ?> autocomplete="off">
+                <?php endif; ?>
+                <?php if ($help): ?><span class="help"><?= e($help) ?></span><?php endif; ?>
+              </label>
+            <?php endforeach; ?>
+          </div>
+        <?php endforeach; ?>
+        <p class="xs muted <?= $authType === 'oauth2' ? '' : 'hidden' ?>" data-auth-fields="oauth2-note">Το token ζητείται αυτόματα πριν την κλήση, κρατιέται μέχρι να λήξει και ανανεώνεται αν το API απαντήσει 401.</p>
       </div>
 
       <div class="stack-sm" data-body-editor>
@@ -172,6 +247,21 @@ if ($hasOld) {
     </section>
 
     <section class="card stack">
+      <h2>SLA & σελίδα κατάστασης</h2>
+      <div class="form-grid">
+        <label class="field">Στόχος διαθεσιμότητας (SLA %)
+          <input class="input" type="number" step="0.01" min="1" max="100" name="sla_target" value="<?= e($v('sla_target')) ?>" placeholder="π.χ. 99.5">
+          <span class="help">Εμφανίζεται στις Αναφορές ως «Εντός / Εκτός στόχου»</span>
+        </label>
+        <label class="field">Όνομα στη δημόσια σελίδα κατάστασης
+          <input class="input" name="status_name" value="<?= e($v('status_name')) ?>" maxlength="100" placeholder="Κενό = το όνομα του job">
+          <span class="help">Π.χ. «Συγχρονισμός παραγγελιών e-shop». Δεν εμφανίζονται ποτέ URLs ή λεπτομέρειες.</span>
+        </label>
+      </div>
+      <label class="check"><input type="checkbox" name="show_on_status" value="1" <?= $v('show_on_status') ? 'checked' : '' ?>>Εμφάνιση στη δημόσια σελίδα κατάστασης</label>
+    </section>
+
+    <section class="card stack <?= $jobType === 'heartbeat' ? 'hidden' : '' ?>" data-type-only="http">
       <h2>Εκτέλεση & αξιοπιστία</h2>
       <div class="form-grid">
         <label class="field">Timeout (δευτ.)
@@ -214,7 +304,7 @@ if ($hasOld) {
 
   <aside class="stack" style="min-width:0">
     <?php if ($canRun): ?>
-      <section class="card stack-sm" id="test-run">
+      <section class="card stack-sm <?= $jobType === 'heartbeat' ? 'hidden' : '' ?>" id="test-run" data-type-only="http">
         <div class="row between"><h2>Test run</h2><button class="btn btn-ghost btn-sm" type="button" data-test-run>Εκτέλεση</button></div>
         <p class="small muted" data-test-idle>Στέλνει το request τώρα, με τις τρέχουσες ρυθμίσεις της φόρμας, χωρίς να αποθηκευτεί το job ή να σταλούν ειδοποιήσεις.</p>
         <div data-test-result class="stack-sm hidden"></div>
@@ -239,6 +329,23 @@ if ($hasOld) {
           </tbody>
         </table>
       </div>
+      <div class="stack-sm" style="padding:12px;border:1px solid var(--border);border-radius:12px;background:var(--surface-2)">
+        <span class="small" style="font-weight:600">Έξυπνες ειδοποιήσεις</span>
+        <label class="row small" style="gap:8px">Ειδοποίηση αποτυχίας μετά από
+          <input class="input" type="number" min="1" max="50" name="notify_after_failures" value="<?= e($v('notify_after_failures') ?: 1) ?>" style="width:70px;min-height:36px"> συνεχόμενες αποτυχίες
+        </label>
+        <span class="xs muted">Π.χ. 3: ένα στιγμιαίο σφάλμα δεν σε ενοχλεί. Η «Ανάκαμψη» στέλνεται μόνο αν είχε σταλεί αποτυχία.</span>
+        <label class="row small" style="gap:8px;margin-top:6px">Κλιμάκωση: αν αποτυγχάνει για
+          <input class="input" type="number" min="0" max="10080" name="escalate_after_minutes" value="<?= e($v('escalate_after_minutes')) ?>" placeholder="—" style="width:80px;min-height:36px"> λεπτά, στείλε επιπλέον σε:
+        </label>
+        <?php $esc = array_filter(explode(',', (string) $v('escalate_channels'))); ?>
+        <div class="chips">
+          <?php foreach ($channels as $ch => $l): ?>
+            <label class="check xs" style="padding:4px 10px;border:1px solid var(--border);border-radius:999px;background:var(--surface)"><input type="checkbox" name="escalate_channels[]" value="<?= e($ch) ?>" <?= in_array($ch, $esc, true) ? 'checked' : '' ?>><?= e($l) ?></label>
+          <?php endforeach; ?>
+        </div>
+        <span class="xs muted">Μία φορά ανά περιστατικό, με πρόθεμα «[ΚΛΙΜΑΚΩΣΗ]». Κενό = χωρίς κλιμάκωση. Ιδανικό για SMS/Viber.</span>
+      </div>
       <div class="stack-sm" data-push-targets>
         <span class="small" style="font-weight:500;color:var(--text-2)">Push προς</span>
         <div class="seg" role="radiogroup" aria-label="Παραλήπτες push">
@@ -261,9 +368,22 @@ if ($hasOld) {
           <?php endforeach; ?>
         </div>
       </div>
-      <label class="field">Παραλήπτες email <span class="help">Κενό = οι προεπιλεγμένοι από τις Ρυθμίσεις</span>
-        <input class="input" name="notify_emails" value="<?= e($v('notify_emails')) ?>" placeholder="ops@example.gr, it@example.gr">
-      </label>
+      <?php $defaultEmails = (string) App\Services\Settings::get((int) $tenant['id'], 'notify.emails', ''); ?>
+      <div class="field" data-email-chips>
+        <label for="notify-emails-input">Παραλήπτες email για αυτό το job</label>
+        <input type="hidden" name="notify_emails" value="<?= e($v('notify_emails')) ?>">
+        <div class="chip-input">
+          <span data-chips></span>
+          <input id="notify-emails-input" type="email" list="member-emails" placeholder="Γράψε email και πάτα Enter" autocomplete="off">
+        </div>
+        <datalist id="member-emails"><?php foreach ($pushMembers as $m): ?><option value="<?= e($m['email']) ?>"><?= e($m['name']) ?></option><?php endforeach; ?></datalist>
+        <?php if ($pushMembers): ?>
+          <div class="row" style="gap:4px"><span class="xs muted">Μέλη:</span>
+            <?php foreach (array_slice($pushMembers, 0, 8) as $m): ?><button type="button" class="var-chip" style="font-family:var(--font)" data-add-email="<?= e($m['email']) ?>" title="<?= e($m['email']) ?>">+ <?= e($m['name']) ?></button><?php endforeach; ?>
+          </div>
+        <?php endif; ?>
+        <span class="help" data-default-emails>Αν μείνει κενό, στέλνεται στους προεπιλεγμένους: <strong><?= $defaultEmails !== '' ? e($defaultEmails) : 'δεν έχουν οριστεί' ?></strong><?php if (Auth::can('settings.notifications')): ?> · <a href="<?= e(url('settings')) ?>">αλλαγή</a><?php endif; ?></span>
+      </div>
       <label class="field">Email connector
         <select class="select" name="email_connector_id">
           <option value="">Προεπιλογή</option>
@@ -305,20 +425,24 @@ if ($hasOld) {
         <?php endforeach; ?>
       </section>
 
-      <?php if ($canManage): ?>
+      <?php if ($canCreate || $canDelete || $canExport || $canVersions): ?>
         <section class="card stack-sm">
           <h2>Ενέργειες</h2>
           <div class="row">
-            <button class="btn btn-sm" type="submit" form="dup-form"><?= icon('copy', 14) ?>Αντίγραφο</button>
-            <button class="btn btn-sm btn-danger" type="submit" form="del-form"><?= icon('trash', 14) ?>Διαγραφή</button>
+            <?php if ($canCreate): ?><button class="btn btn-sm" type="submit" form="dup-form"><?= icon('copy', 14) ?>Αντίγραφο</button><?php endif; ?>
+            <?php if ($canExport): ?><a class="btn btn-sm" href="<?= e(url('jobs/export', ['ids' => $job['id']])) ?>"><?= icon('download', 14) ?>Εξαγωγή JSON</a><?php endif; ?>
+            <?php if ($canVersions): ?><a class="btn btn-sm" href="<?= e(url('jobs/' . $job['id'] . '/versions')) ?>"><?= icon('clock', 14) ?>Εκδόσεις</a><?php endif; ?>
+            <?php if ($canDelete): ?><button class="btn btn-sm btn-danger" type="submit" form="del-form"><?= icon('trash', 14) ?>Διαγραφή</button><?php endif; ?>
           </div>
         </section>
       <?php endif; ?>
     <?php endif; ?>
   </aside>
 </form>
-<?php if (!$isNew && $canManage): ?>
+<?php if (!$isNew && $canCreate): ?>
   <form id="dup-form" method="post" action="<?= e(url('jobs/' . $job['id'] . '/duplicate')) ?>" class="hidden"><?= csrf_field() ?></form>
+<?php endif; ?>
+<?php if (!$isNew && $canDelete): ?>
   <form id="del-form" method="post" action="<?= e(url('jobs/' . $job['id'] . '/delete')) ?>" class="hidden" data-confirm="Να διαγραφεί οριστικά το job «<?= e($job['name']) ?>» μαζί με το ιστορικό του;"><?= csrf_field() ?></form>
 <?php endif; ?>
 <script src="<?= e(asset('cron-builder.js')) ?>" defer></script>

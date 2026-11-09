@@ -30,7 +30,7 @@ final class NotificationController extends Controller
     /** Detailed log of every notification sent / failed / skipped. */
     public function history(): Response
     {
-        $this->authorize('runs.view');
+        $this->authorize('notifications.history');
         $tid = $this->tenantId();
         $f = [
             'channel' => (string) $this->req->query('channel', ''),

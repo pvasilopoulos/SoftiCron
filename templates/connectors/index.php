@@ -16,6 +16,7 @@ $total = array_sum($counts);
   <a class="btn" href="<?= e(url('notifications/history')) ?>"><?= icon('bell', 16) ?>Ιστορικό αποστολών</a>
 </div>
 
+<?php if (\App\Auth\Auth::can('connectors.manage')): ?>
 <section class="stack-sm">
   <div class="row between"><h2>Διαθέσιμα add-ons</h2><span class="xs muted">Πρόσθεσε όσα κανάλια χρειάζεσαι · κάθε τύπος μπορεί να έχει πολλούς connectors</span></div>
   <div class="addon-grid">
@@ -34,6 +35,7 @@ $total = array_sum($counts);
     <?php endforeach; ?>
   </div>
 </section>
+<?php endif; ?>
 
 <section class="stack-sm">
   <div class="row between">
@@ -85,17 +87,23 @@ $total = array_sum($counts);
             </p>
           </div>
           <div class="row" style="gap:6px;margin-top:auto">
+            <?php if (\App\Auth\Auth::can('connectors.test')): ?>
             <form method="post" action="<?= e(url('connectors/' . $c['id'] . '/test')) ?>" class="inline" data-loading>
               <?= csrf_field() ?><input type="hidden" name="from" value="list">
               <button class="btn btn-sm" type="submit" title="<?= in_array($c['type'], ['smtp', 'm365'], true) ? 'Στέλνει δοκιμαστικό email στο δικό σου email' : 'Στέλνει δοκιμαστικό μήνυμα' ?>"><?= icon('send', 14) ?>Δοκιμή</button>
             </form>
+            <?php endif; ?>
+            <?php if (\App\Auth\Auth::can('connectors.manage')): ?>
             <a class="btn btn-sm" href="<?= e(url('connectors/' . $c['id'] . '/edit')) ?>"><?= icon('edit', 14) ?>Ρυθμίσεις</a>
+            <?php endif; ?>
             <span class="grow"></span>
+            <?php if (\App\Auth\Auth::can('connectors.manage')): ?>
             <?php if (!$c['is_default']): ?>
               <form method="post" action="<?= e(url('connectors/' . $c['id'] . '/default')) ?>" class="inline"><?= csrf_field() ?><button class="btn btn-sm btn-icon" type="submit" title="Ορισμός ως προεπιλογή" aria-label="<?= e('Ορισμός ως προεπιλογή: ' . $c['name']) ?>"><?= icon('check', 14) ?></button></form>
             <?php endif; ?>
             <form method="post" action="<?= e(url('connectors/' . $c['id'] . '/duplicate')) ?>" class="inline"><?= csrf_field() ?><button class="btn btn-sm btn-icon" type="submit" title="Αντίγραφο" aria-label="<?= e('Αντίγραφο: ' . $c['name']) ?>"><?= icon('copy', 14) ?></button></form>
             <form method="post" action="<?= e(url('connectors/' . $c['id'] . '/delete')) ?>" class="inline" data-confirm="<?= e('Να διαγραφεί ο connector «' . $c['name'] . '»;') ?>"><?= csrf_field() ?><button class="btn btn-sm btn-icon btn-danger" type="submit" title="Διαγραφή" aria-label="<?= e('Διαγραφή: ' . $c['name']) ?>"><?= icon('trash', 14) ?></button></form>
+            <?php endif; ?>
           </div>
         </article>
       <?php endforeach; ?>

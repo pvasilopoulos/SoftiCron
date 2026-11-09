@@ -9,7 +9,7 @@ if ($run['status'] === 'success' && $run['is_slow']) {
 }
 $heroCls = $run['status'] === 'success' ? 'ok' : ($run['status'] === 'failed' ? 'fail' : 'other');
 $heroIcon = $run['status'] === 'success' ? 'check' : ($run['status'] === 'failed' ? 'x' : 'jobs');
-$triggers = ['schedule' => 'Προγραμματισμένη', 'manual' => 'Χειροκίνητη' . ($triggeredBy ? ' · ' . $triggeredBy : ''), 'missed' => 'Χαμένη εκτέλεση'];
+$triggers = ['schedule' => 'Προγραμματισμένη', 'manual' => 'Χειροκίνητη' . ($triggeredBy ? ' · ' . $triggeredBy : ''), 'missed' => 'Χαμένη εκτέλεση', 'ping' => 'Ping (heartbeat)', 'api' => 'API' . ($triggeredBy ? ' · ' . $triggeredBy : '')];
 ?>
 <div class="page-head"<?= $live ? ' data-autorefresh="3"' : '' ?>>
   <div>
@@ -92,7 +92,7 @@ $triggers = ['schedule' => 'Προγραμματισμένη', 'manual' => 'Χε
       <?php foreach ($notifications as $n): ?>
         <div class="list-item small">
           <span class="badge <?= $n['status'] === 'sent' ? 'ok' : ($n['status'] === 'skipped' ? 'off' : 'fail') ?>"><?= $n['status'] === 'sent' ? '✓' : ($n['status'] === 'skipped' ? '–' : '✗') ?> <?= e(Notifier::CHANNELS[$n['channel']] ?? $n['channel']) ?></span>
-          <span class="grow"><?= e(Notifier::EVENTS[$n['event']] ?? $n['event']) ?> · <?= e($n['target']) ?><?php if ($n['error']): ?><br><span class="xs" style="color:var(--fail-fg)"><?= e($n['error']) ?></span><?php endif; ?></span>
+          <span class="grow"><?= e(Notifier::eventLabel($n['event'])) ?> · <?= e($n['target']) ?><?php if ($n['error']): ?><br><span class="xs" style="color:var(--fail-fg)"><?= e($n['error']) ?></span><?php endif; ?></span>
         </div>
       <?php endforeach; ?>
     </section>

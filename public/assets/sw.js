@@ -6,14 +6,19 @@ self.addEventListener('push', (event) => {
   let data = {};
   try { data = event.data ? event.data.json() : {}; } catch (e) { data = { title: 'CronApp', body: event.data ? event.data.text() : '' }; }
   const title = data.title || 'CronApp';
-  event.waitUntil(self.registration.showNotification(title, {
-    body: data.body || '',
-    icon: data.icon || '/assets/icons/icon-192.png',
-    badge: data.badge || '/assets/icons/badge-72.png',
-    tag: data.tag || undefined,
-    renotify: !!data.tag,
-    data: { url: data.url || '/' },
-  }));
+  event.waitUntil(Promise.all([
+    self.registration.showNotification(title, {
+      body: data.body || '',
+      icon: data.icon || '/assets/icons/icon-192.png',
+      badge: data.badge || '/assets/icons/badge-72.png',
+      tag: data.tag || undefined,
+      renotify: !!data.tag,
+      data: { url: data.url || '/' },
+    }),
+    // Open tabs refresh the bell (notification center) right away.
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+      .then((all) => all.forEach((c) => c.postMessage({ type: 'push' }))),
+  ]));
 });
 
 self.addEventListener('notificationclick', (event) => {

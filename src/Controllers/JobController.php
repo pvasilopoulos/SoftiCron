@@ -70,10 +70,13 @@ final class JobController extends Controller
 
     public function create(): Response
     {
-        $this->authorize('jobs.manage');
+        $this->authorize('jobs.create');
         $tenant = $this->tenant();
         $job = [
-            'id' => null, 'name' => '', 'group_name' => (string) $this->req->query('group', ''), 'description' => '', 'enabled' => 1, 'method' => 'GET', 'url' => 'https://',
+            'id' => null, 'type' => $this->req->query('type') === 'heartbeat' ? 'heartbeat' : 'http', 'auth_type' => 'none', 'auth_enc' => null,
+            'grace_minutes' => 5, 'notify_after_failures' => 1, 'escalate_after_minutes' => '', 'escalate_channels' => '', 'sla_target' => '',
+            'show_on_status' => 0, 'status_name' => '', 'ping_token' => null,
+            'name' => '', 'group_name' => (string) $this->req->query('group', ''), 'description' => '', 'enabled' => 1, 'method' => 'GET', 'url' => 'https://',
             'body_type' => 'none', 'body' => '', 'cron_expr' => '*/5 * * * *', 'schedule_ui' => null,
             'timezone' => $tenant['timezone'], 'timeout_sec' => 30, 'max_retries' => 2, 'retry_strategy' => 'exponential',
             'retry_delay_sec' => 10, 'overlap_policy' => 'skip', 'success_codes' => '200-299', 'success_contains' => '',
@@ -146,9 +149,17 @@ final class JobController extends Controller
             'emailConnectors' => Connectors::listFor($tid, 'email'),
             'telegramConnectors' => Connectors::listFor($tid, 'telegram'),
             'minInterval' => (int) $tenant['min_interval_minutes'],
-            'canManage' => Auth::can('jobs.manage'),
+            'canManage' => Auth::can($job['id'] ? 'jobs.edit' : 'jobs.create'),
+            'canCreate' => Auth::can('jobs.create'),
+            'canDelete' => Auth::can('jobs.delete'),
+            'canExport' => Auth::can('jobs.export'),
+            'canVersions' => Auth::can('jobs.versions'),
             'canRun' => Auth::can('jobs.run'),
-            'variables' => ['run.scheduled_at', 'run.previous_at', 'run.timestamp', 'run.id', 'job.name', 'job.id', 'tenant.slug', 'now'],
+            'variables' => array_merge(
+                ['run.scheduled_at', 'run.previous_at', 'run.timestamp', 'run.id', 'job.name', 'job.id', 'tenant.slug', 'now'],
+                array_map(fn ($v) => ($v['is_secret'] ? 'secrets.' : 'vars.') . $v['name'], \App\Services\Variables::all($tid)),
+            ),
+            'authCfg' => \App\Services\JobAuth::config($job),
         ]);
     }
 
@@ -162,7 +173,7 @@ final class JobController extends Controller
     }
 
     /** @return array{0: array, 1: array, 2: string[]} [data, notify rules, errors] */
-    private function collect(?array $existing): array
+    public function collect(?array $existing): array
     {
         $tenant = $this->tenant();
         $r = $this->req;
@@ -171,12 +182,16 @@ final class JobController extends Controller
         if ($name === '') {
             $errors[] = 'Το όνομα είναι υποχρεωτικό.';
         }
+        // Job type is chosen on creation and never changes afterwards.
+        $type = $existing ? (string) $existing['type'] : ($r->input('type') === 'heartbeat' ? 'heartbeat' : 'http');
         $method = strtoupper((string) $r->input('method', 'GET'));
         if (!in_array($method, self::METHODS, true)) {
             $method = 'GET';
         }
         $url = (string) $r->input('url', '');
-        if (!preg_match('#^https?://[^\s]+$#i', $url)) {
+        if ($type === 'heartbeat') {
+            $url = '';
+        } elseif (!preg_match('#^https?://[^\s]+$#i', $url)) {
             $errors[] = 'Το URL πρέπει να ξεκινά με http:// ή https://.';
         } elseif (!str_contains((string) parse_url($url, PHP_URL_HOST), '{')) {
             try {
@@ -289,6 +304,28 @@ final class JobController extends Controller
                 $phones[] = $n;
             }
         }
+        // Request authentication (secret fields left empty keep their stored value).
+        $authType = (string) $r->input('auth_type', 'none');
+        if (!isset(\App\Services\JobAuth::TYPES[$authType])) {
+            $authType = 'none';
+        }
+        $authOld = $existing ? \App\Services\JobAuth::config($existing) : [];
+        $authCfg = [];
+        foreach (\App\Services\JobAuth::FIELDS[$authType] ?? [] as $key => [$label, $input, $secret]) {
+            $val = trim((string) ($_POST['auth'][$key] ?? ''));
+            if ($secret && $val === '' && isset($authOld[$key]) && ($existing['auth_type'] ?? '') === $authType) {
+                $val = (string) $authOld[$key];
+            }
+            $authCfg[$key] = $val;
+        }
+        if ($authType === 'oauth2') {
+            if (!preg_match('#^https://#i', $authCfg['token_url'] ?? '')) {
+                $errors[] = 'OAuth2: το Token URL πρέπει να ξεκινά με https://';
+            }
+            if (($authCfg['client_id'] ?? '') === '' || ($authCfg['client_secret'] ?? '') === '') {
+                $errors[] = 'OAuth2: συμπλήρωσε Client ID και Client secret.';
+            }
+        }
         $group = trim((string) preg_replace('/\s+/u', ' ', (string) $r->input('group_name', '')));
         $data = [
             'name' => $name,
@@ -298,6 +335,8 @@ final class JobController extends Controller
             'method' => $method,
             'url' => mb_substr($url, 0, 2048),
             'headers_enc' => $headers ? Crypto::encryptJson($headers) : null,
+            'auth_type' => $authType,
+            'auth_enc' => $authType !== 'none' ? Crypto::encryptJson($authCfg) : null,
             'body_type' => $bodyType,
             'body' => $bodyType === 'none' ? null : $body,
             'cron_expr' => $expr,
@@ -318,7 +357,15 @@ final class JobController extends Controller
             'notify_phones' => $phones ? mb_substr(implode(', ', $phones), 0, 500) : null,
             'email_connector_id' => $connector('email_connector_id', 'email'),
             'telegram_connector_id' => $connector('telegram_connector_id', 'telegram'),
+            'type' => $type,
+            'grace_minutes' => max(1, min(1440, (int) $r->input('grace_minutes', 5))),
             'push_target' => $r->input('push_target') === 'selected' ? 'selected' : 'all',
+            'notify_after_failures' => max(1, min(50, (int) $r->input('notify_after_failures', 1))),
+            'escalate_after_minutes' => (int) $r->input('escalate_after_minutes', 0) > 0 ? min(10080, (int) $r->input('escalate_after_minutes')) : null,
+            'escalate_channels' => implode(',', array_intersect(array_keys(Notifier::CHANNELS), (array) ($_POST['escalate_channels'] ?? []))) ?: null,
+            'sla_target' => is_numeric($r->input('sla_target')) && (float) $r->input('sla_target') > 0 ? min(100, max(1, round((float) $r->input('sla_target'), 2))) : null,
+            'show_on_status' => $r->input('show_on_status') ? 1 : 0,
+            'status_name' => mb_substr((string) $r->input('status_name', ''), 0, 100) ?: null,
         ];
         // Push recipients: only members of this tenant and their own devices are accepted.
         $memberIds = array_map('intval', $this->db->column('SELECT user_id FROM memberships WHERE tenant_id = ?', [$tenant['id']]));
@@ -361,7 +408,7 @@ final class JobController extends Controller
         return [$data, $rules, $errors, $targets];
     }
 
-    private function saveRules(int $jobId, array $rules, array $targets): void
+    public function saveRules(int $jobId, array $rules, array $targets): void
     {
         $this->db->exec('DELETE FROM job_notifications WHERE job_id = ?', [$jobId]);
         foreach ($rules as [$event, $ch]) {
@@ -378,7 +425,7 @@ final class JobController extends Controller
 
     public function store(): Response
     {
-        $this->authorize('jobs.manage');
+        $this->authorize('jobs.create');
         $tenant = $this->tenant();
         [$data, $rules, $errors, $targets] = $this->collect(null);
         $count = (int) $this->db->value('SELECT COUNT(*) FROM jobs WHERE tenant_id = ?', [$tenant['id']]);
@@ -389,11 +436,12 @@ final class JobController extends Controller
             return $this->invalid($errors);
         }
         $id = $this->db->transaction(function () use ($data, $rules, $targets, $tenant): int {
-            $id = $this->db->insert('jobs', $data + ['tenant_id' => $tenant['id'], 'created_by' => Auth::id()]);
+            $id = $this->db->insert('jobs', $data + ['tenant_id' => $tenant['id'], 'created_by' => Auth::id(), 'ping_token' => bin2hex(random_bytes(16))]);
             $this->saveRules($id, $rules, $targets);
             return $id;
         });
         Scheduler::refreshNextRun($id);
+        \App\Services\JobVersions::snapshot($id, 'Δημιουργία');
         Audit::log('job.created', 'job', $id, $data['name'], null, $this->auditable($data));
         $this->flash('success', 'Το job δημιουργήθηκε.');
         return $this->redirect("jobs/$id/edit");
@@ -401,26 +449,30 @@ final class JobController extends Controller
 
     public function update(int $id): Response
     {
-        $this->authorize('jobs.manage');
+        $this->authorize('jobs.edit');
         $job = $this->find($id);
         [$data, $rules, $errors, $targets] = $this->collect($job);
         if ($errors) {
             return $this->invalid($errors);
         }
+        // Keep the state before the change (no-op when it is already the latest version).
+        \App\Services\JobVersions::snapshot($id, 'Κατάσταση πριν την αλλαγή');
         $this->db->transaction(function () use ($id, $data, $rules, $targets): void {
             $this->db->update('jobs', $data, 'id = :id', ['id' => $id]);
             $this->saveRules($id, $rules, $targets);
         });
         Scheduler::refreshNextRun($id);
+        \App\Services\JobVersions::snapshot($id, mb_substr(trim((string) $this->req->input('version_comment', '')), 0, 255) ?: null);
         Audit::log('job.updated', 'job', $id, $data['name'], $this->auditable($job), $this->auditable($data));
         $this->flash('success', 'Οι αλλαγές αποθηκεύτηκαν.');
         return $this->redirect("jobs/$id/edit");
     }
 
-    private function auditable(array $job): array
+    public function auditable(array $job): array
     {
         $out = array_intersect_key($job, array_flip(['name', 'group_name', 'notify_phones', 'enabled', 'method', 'url', 'body_type', 'cron_expr', 'timezone', 'timeout_sec', 'max_retries', 'overlap_policy', 'success_codes', 'active_from', 'active_until', 'notify_emails']));
         $out['headers'] = array_map(fn ($h) => $h['name'] . ': ' . (!empty($h['secret']) ? '••••' : $h['value']), HttpExecutor::headers($job));
+        $out['auth_type'] = $job['auth_type'] ?? 'none';
         return $out;
     }
 
@@ -438,7 +490,7 @@ final class JobController extends Controller
 
     public function delete(int $id): Response
     {
-        $this->authorize('jobs.manage');
+        $this->authorize('jobs.delete');
         $job = $this->find($id);
         $this->db->exec('DELETE FROM jobs WHERE id = ?', [$id]);
         Audit::log('job.deleted', 'job', $id, $job['name'], $this->auditable($job), null);
@@ -448,7 +500,7 @@ final class JobController extends Controller
 
     public function toggle(int $id): Response
     {
-        $this->authorize('jobs.manage');
+        $this->authorize('jobs.toggle');
         $job = $this->find($id);
         $enabled = $job['enabled'] ? 0 : 1;
         $this->db->update('jobs', ['enabled' => $enabled], 'id = :id', ['id' => $id]);
@@ -463,17 +515,20 @@ final class JobController extends Controller
 
     public function duplicate(int $id): Response
     {
-        $this->authorize('jobs.manage');
+        $this->authorize('jobs.create');
         $job = $this->find($id);
         $copy = $job;
         unset($copy['id'], $copy['created_at'], $copy['updated_at']);
         $copy['name'] = mb_substr($job['name'] . ' (αντίγραφο)', 0, 150);
         $copy['enabled'] = 0;
         $copy['next_run_at'] = $copy['last_run_at'] = $copy['last_status'] = $copy['last_duration_ms'] = null;
+        $copy['last_ping_at'] = $copy['failing_since'] = $copy['escalated_at'] = null;
+        $copy['ping_token'] = bin2hex(random_bytes(16)); // a copy never shares the ping URL
         $copy['created_by'] = Auth::id();
         $newId = $this->db->insert('jobs', $copy);
         $this->db->exec('INSERT INTO job_notifications (job_id, event, channel, template_id) SELECT ?, event, channel, template_id FROM job_notifications WHERE job_id = ?', [$newId, $id]);
         $this->db->exec('INSERT INTO job_push_targets (job_id, user_id, subscription_id) SELECT ?, user_id, subscription_id FROM job_push_targets WHERE job_id = ?', [$newId, $id]);
+        \App\Services\JobVersions::snapshot($newId, 'Αντίγραφο του #' . $id);
         Audit::log('job.created', 'job', $newId, $copy['name'] . ' (αντιγραφή από #' . $id . ')');
         $this->flash('success', 'Δημιουργήθηκε αντίγραφο σε παύση.');
         return $this->redirect("jobs/$newId/edit");
@@ -483,6 +538,10 @@ final class JobController extends Controller
     {
         $this->authorize('jobs.run');
         $job = $this->find($id);
+        if ($job['type'] === 'heartbeat') {
+            $this->flash('error', 'Τα heartbeat jobs δεν εκτελούνται από εδώ· περιμένουν ping από το δικό σου script.');
+            return $this->back('jobs');
+        }
         $scheduler = new Scheduler();
         $runId = $scheduler->enqueue($job, gmdate('Y-m-d H:i:s'), 'manual', Auth::id());
         if (!$runId) {
@@ -524,7 +583,11 @@ final class JobController extends Controller
         $job = $data + ['id' => $existingId, 'tenant_id' => $tenant['id']];
         set_time_limit((int) $job['timeout_sec'] + 15);
         $ctx = TemplateRenderer::requestContext($job, $tenant, null, $existing['last_run_at'] ?? null);
-        $req = HttpExecutor::buildRequest($job, $ctx);
+        try {
+            $req = HttpExecutor::buildRequest($job, $ctx);
+        } catch (\Throwable $e) {
+            return $this->json(['ok' => false, 'error' => $e->getMessage()], 422);
+        }
         $res = HttpExecutor::execute($req);
         [$ok, $reason] = HttpExecutor::evaluate($job, $res);
         $pretty = $res['body'];

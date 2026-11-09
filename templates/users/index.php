@@ -8,7 +8,9 @@ $tz = Auth::tenant()['timezone'];
   <div><h1>Χρήστες</h1><p class="sub"><?= count($members) ?> μέλη στον <?= e(Auth::tenant()['name']) ?></p></div>
   <div class="row">
     <?php if (Auth::can('roles.manage')): ?><a class="btn" href="<?= e(url('roles')) ?>"><?= icon('roles', 16) ?>Ρόλοι & δικαιώματα</a><?php endif; ?>
+    <?php if (\App\Auth\Auth::can('users.manage')): ?>
     <a class="btn btn-primary" href="<?= e(url('users/new')) ?>"><?= icon('plus', 16) ?>Νέος χρήστης</a>
+    <?php endif; ?>
   </div>
 </div>
 
@@ -38,6 +40,7 @@ $tz = Auth::tenant()['timezone'];
             <tr>
               <td class="primary"><div class="row" style="flex-wrap:nowrap"><span class="avatar"><?= e(initials($m['name'])) ?></span><div class="stack-sm" style="gap:0;min-width:0"><a class="small" style="font-weight:600;color:var(--text)" href="<?= e(url('users/' . $m['id'] . '/edit')) ?>"><?= e($m['name']) ?><?= (int) $m['id'] === Auth::id() ? ' (εσύ)' : '' ?></a><?= $m['status'] === 'disabled' ? ' <span class="badge off">Ανενεργός</span>' : '' ?><span class="xs muted"><?= e($m['email']) ?></span></div></div></td>
               <td data-label="Ρόλος">
+                <?php if (!\App\Auth\Auth::can('users.manage')): ?><span class="small"><?= e($m['role_name'] ?? '') ?></span><?php else: ?>
                 <form method="post" action="<?= e(url('users/' . $m['id'] . '/role')) ?>" class="inline">
                   <?= csrf_field() ?>
                   <label class="sr-only" for="role-<?= (int) $m['id'] ?>">Ρόλος</label>
@@ -45,14 +48,19 @@ $tz = Auth::tenant()['timezone'];
                     <?php foreach ($roles as $r): ?><option value="<?= (int) $r['id'] ?>" <?= (int) $r['id'] === (int) $m['role_id'] ? 'selected' : '' ?>><?= e($r['name']) ?></option><?php endforeach; ?>
                   </select>
                 </form>
+                <?php endif; ?>
               </td>
               <td data-label="Τελευταία σύνδεση" class="small muted"><?= e($m['last_login_at'] ? rel_time($m['last_login_at']) : 'Ποτέ') ?></td>
               <td class="num nowrap">
+                <?php if (\App\Auth\Auth::can('users.manage')): ?>
                 <a class="btn btn-sm" href="<?= e(url('users/' . $m['id'] . '/edit')) ?>"><?= icon('edit', 14) ?>Επεξεργασία</a>
+                <?php endif; ?>
+                <?php if (\App\Auth\Auth::can('users.delete')): ?>
                 <?php if ((int) $m['id'] !== Auth::id()): ?>
                   <form method="post" action="<?= e(url('users/' . $m['id'] . '/remove')) ?>" class="inline" data-confirm="Να διαγραφεί ο/η <?= e($m['name']) ?>; Αν ανήκει και σε άλλους οργανισμούς, θα αφαιρεθεί μόνο από αυτόν.">
                     <?= csrf_field() ?><button class="btn btn-ghost btn-sm" type="submit" style="color:var(--fail-fg)" aria-label="Διαγραφή <?= e($m['name']) ?>"><?= icon('trash', 14) ?></button>
                   </form>
+                <?php endif; ?>
                 <?php endif; ?>
               </td>
             </tr>
@@ -63,6 +71,7 @@ $tz = Auth::tenant()['timezone'];
   </section>
 
   <aside class="stack">
+    <?php if (\App\Auth\Auth::can('users.manage')): ?>
     <form method="post" action="<?= e(url('users/invite')) ?>" class="card stack">
       <?= csrf_field() ?>
       <h2>Πρόσκληση χρήστη</h2>
@@ -73,13 +82,16 @@ $tz = Auth::tenant()['timezone'];
       <button class="btn btn-primary" type="submit"><?= icon('send', 16) ?>Αποστολή πρόσκλησης</button>
       <p class="xs muted">Στέλνεται email μέσω του προεπιλεγμένου email connector. Αν δεν υπάρχει, θα πάρεις σύνδεσμο για να τον στείλεις εσύ.</p>
     </form>
+    <?php endif; ?>
     <?php if ($invites): ?>
       <section class="card">
         <h2 style="margin-bottom:6px">Εκκρεμείς προσκλήσεις</h2>
         <?php foreach ($invites as $i): ?>
           <div class="list-item">
             <div class="grow stack-sm" style="gap:0"><strong class="small"><?= e($i['email']) ?></strong><span class="xs muted"><?= e($i['role_name']) ?> · λήγει <?= e(rel_time($i['expires_at'])) ?></span></div>
+            <?php if (\App\Auth\Auth::can('users.delete')): ?>
             <form method="post" action="<?= e(url('invitations/' . $i['id'] . '/revoke')) ?>"><?= csrf_field() ?><button class="btn btn-ghost btn-sm" type="submit">Ακύρωση</button></form>
+            <?php endif; ?>
           </div>
         <?php endforeach; ?>
       </section>

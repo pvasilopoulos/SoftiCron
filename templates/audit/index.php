@@ -50,7 +50,9 @@ $days = ['Κυριακή', 'Δευτέρα', 'Τρίτη', 'Τετάρτη', 'Π
 ?>
 <div class="page-head">
   <div><h1>Audit log</h1><p class="sub">Ποιος έκανε τι και πότε · οι κωδικοί και τα μυστικά δεν καταγράφονται ποτέ · <?= (int) $page['total'] ?> εγγραφές</p></div>
+  <?php if (\App\Auth\Auth::can('audit.export')): ?>
   <a class="btn" href="<?= e(url('audit/export', $base)) ?>"><?= icon('copy', 16) ?>Εξαγωγή CSV</a>
+  <?php endif; ?>
 </div>
 
 <?php if ($areaCounts): ?>

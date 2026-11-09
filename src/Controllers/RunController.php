@@ -12,7 +12,7 @@ use App\Services\Scheduler;
 
 final class RunController extends Controller
 {
-    public const TRIGGERS = ['schedule' => 'Πρόγραμμα', 'manual' => 'Χειροκίνητη', 'missed' => 'Χαμένη'];
+    public const TRIGGERS = ['schedule' => 'Πρόγραμμα', 'manual' => 'Χειροκίνητη', 'missed' => 'Χαμένη', 'ping' => 'Ping (heartbeat)', 'api' => 'API'];
     public const HTTP_CLASSES = ['2xx' => '2xx Επιτυχία', '3xx' => '3xx Ανακατεύθυνση', '4xx' => '4xx Σφάλμα client', '5xx' => '5xx Σφάλμα server', 'none' => 'Χωρίς απάντηση'];
     public const PERIODS = ['1h' => 'Τελευταία ώρα', '24h' => '24 ώρες', '7d' => '7 ημέρες', '30d' => '30 ημέρες'];
 
@@ -115,14 +115,14 @@ final class RunController extends Controller
         $groups = $this->db->column('SELECT DISTINCT group_name FROM jobs WHERE tenant_id = ? AND group_name IS NOT NULL ORDER BY group_name', [$tid]);
         return $this->view('runs/index', [
             'title' => 'Εκτελέσεις', 'nav' => 'runs', 'page' => $page, 'f' => $f, 'jobs' => $jobs, 'groups' => $groups,
-            'counts' => $counts, 'maxDur' => max(1, $maxDur), 'canRun' => Auth::can('jobs.run'),
+            'counts' => $counts, 'maxDur' => max(1, $maxDur), 'canRun' => Auth::can('runs.retry'),
         ]);
     }
 
     /** CSV export with the same filters as the list (max 10.000 rows). */
     public function export(): Response
     {
-        $this->authorize('runs.view');
+        $this->authorize('runs.export');
         [$where, $p] = $this->filters();
         $tz = $this->tenant()['timezone'];
         $rows = $this->db->all(
@@ -173,7 +173,7 @@ final class RunController extends Controller
             'notifications' => $notifications,
             'triggeredBy' => $user['name'] ?? null,
             'body' => $body,
-            'canRun' => Auth::can('jobs.run'),
+            'canRun' => Auth::can('runs.retry'),
             'live' => in_array($run['status'], ['queued', 'running', 'retrying'], true),
             'prevId' => $prev ? (int) $prev : null,
             'nextId' => $next ? (int) $next : null,
@@ -182,7 +182,7 @@ final class RunController extends Controller
 
     public function retry(int $id): Response
     {
-        $this->authorize('jobs.run');
+        $this->authorize('runs.retry');
         $run = $this->find($id);
         $job = $this->db->one('SELECT * FROM jobs WHERE id = ?', [$run['job_id']]);
         $scheduler = new Scheduler();

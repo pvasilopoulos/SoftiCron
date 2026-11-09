@@ -37,10 +37,10 @@ $val = fn (string $k) => old($k, $tpl[$k] ?? '');
     </label>
     <label class="check"><input type="checkbox" name="is_default" value="1" <?= $val('is_default') ? 'checked' : '' ?>>Προεπιλογή για αυτό το γεγονός και κανάλι</label>
     <div class="form-actions">
-      <?php if (!$isNew): ?><button class="btn btn-danger" type="submit" form="tpl-del"><?= icon('trash', 16) ?>Διαγραφή</button><?php endif; ?>
+      <?php if (!$isNew && \App\Auth\Auth::can('templates.manage')): ?><button class="btn btn-danger" type="submit" form="tpl-del"><?= icon('trash', 16) ?>Διαγραφή</button><?php endif; ?>
       <span class="grow"></span>
-      <button class="btn" type="button" data-preview><?= icon('play', 16) ?>Προεπισκόπηση</button>
-      <button class="btn btn-primary" type="submit">Αποθήκευση</button>
+      <?php if (\App\Auth\Auth::can('templates.test')): ?><button class="btn" type="button" data-preview><?= icon('play', 16) ?>Προεπισκόπηση</button><?php endif; ?>
+      <?php if (\App\Auth\Auth::can('templates.manage')): ?><button class="btn btn-primary" type="submit">Αποθήκευση</button><?php endif; ?>
     </div>
   </form>
   <aside class="stack">

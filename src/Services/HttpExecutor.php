@@ -55,6 +55,10 @@ final class HttpExecutor
                 $hasCt = true;
             }
         }
+        $hasAuth = (bool) array_filter($headers, fn ($h) => stripos($h, 'authorization:') === 0);
+        if (!$hasAuth && ($auth = JobAuth::header($job, $context)) !== null) {
+            $headers[] = $auth;
+        }
         $body = null;
         $type = $job['body_type'] ?? 'none';
         $method = strtoupper((string) $job['method']);

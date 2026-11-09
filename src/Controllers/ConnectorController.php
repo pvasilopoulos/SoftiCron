@@ -14,7 +14,7 @@ final class ConnectorController extends Controller
 {
     public function index(): Response
     {
-        $this->authorize('connectors.manage');
+        $this->authorize('connectors.view');
         $tid = $this->tenantId();
         $type = (string) $this->req->query('type', '');
         $q = (string) $this->req->query('q', '');
@@ -210,7 +210,7 @@ final class ConnectorController extends Controller
 
     public function test(int $id): Response
     {
-        $this->authorize('connectors.manage');
+        $this->authorize('connectors.test');
         $conn = $this->find($id);
         $target = trim((string) $this->req->input('target', ''));
         if ($target === '' && in_array($conn['type'], ['smtp', 'm365'], true)) {

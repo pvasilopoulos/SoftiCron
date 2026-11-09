@@ -70,7 +70,7 @@ $filtered = array_filter($f, fn ($v) => $v !== '' && $v !== 0);
               <td class="primary">
                 <div class="stack-sm" style="gap:2px">
                   <?php if ($n['job_id'] && $n['job_name']): ?><a class="strong small" href="<?= e(url('jobs/' . $n['job_id'] . '/edit')) ?>"><?= e($n['job_name']) ?></a><?php else: ?><span class="small muted">Διαγραμμένο job</span><?php endif; ?>
-                  <span class="xs muted"><?= e(Notifier::EVENTS[$n['event']] ?? $n['event']) ?><?php if ($n['run_id']): ?> · <a href="<?= e(url('runs/' . $n['run_id'])) ?>">εκτέλεση #<?= (int) $n['run_id'] ?></a><?php endif; ?></span>
+                  <span class="xs muted"><?= e(Notifier::eventLabel($n['event'])) ?><?php if ($n['run_id']): ?> · <a href="<?= e(url('runs/' . $n['run_id'])) ?>">εκτέλεση #<?= (int) $n['run_id'] ?></a><?php endif; ?></span>
                 </div>
               </td>
               <td data-label="Κανάλι"><span class="tag" style="display:inline-flex;align-items:center;gap:6px"><?= icon($channelIcon[$n['channel']] ?? 'bell', 12) ?><?= e(Notifier::CHANNELS[$n['channel']] ?? $n['channel']) ?></span></td>

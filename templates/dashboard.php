@@ -94,7 +94,7 @@ $delta = function (?float $a, ?float $b, string $unit, bool $higherIsGood): arra
   <section class="card flush">
     <div class="card-head"><h2>Πρόσφατες εκτελέσεις</h2><?php if (Auth::can('runs.view')): ?><a class="small" href="<?= e(url('runs')) ?>" style="font-weight:600">Όλες οι εκτελέσεις</a><?php endif; ?></div>
     <?php if (!$recent): ?>
-      <div class="empty"><?= icon('runs', 32) ?><span>Δεν υπάρχουν εκτελέσεις ακόμα.</span><?php if (Auth::can('jobs.manage')): ?><a class="btn btn-primary" href="<?= e(url('jobs/new')) ?>">Δημιούργησε το πρώτο job</a><?php endif; ?></div>
+      <div class="empty"><?= icon('runs', 32) ?><span>Δεν υπάρχουν εκτελέσεις ακόμα.</span><?php if (Auth::can('jobs.create')): ?><a class="btn btn-primary" href="<?= e(url('jobs/new')) ?>">Δημιούργησε το πρώτο job</a><?php endif; ?></div>
     <?php else: ?>
       <div class="table-wrap">
         <table class="table rtable">

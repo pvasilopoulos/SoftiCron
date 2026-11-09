@@ -30,9 +30,12 @@ use App\Services\Roles;
         </tr>
       </thead>
       <tbody>
-        <?php foreach (Permissions::ALL as $code => [$group, $label]): ?>
+        <?php $prevGroup = null; foreach (Permissions::ALL as $code => [$group, $label, $desc]): ?>
+          <?php if ($group !== $prevGroup): $prevGroup = $group; ?>
+            <tr><td colspan="<?= count($roles) + 1 ?>" style="background:var(--surface-2);padding-top:10px;padding-bottom:8px"><strong class="small"><?= e($group) ?></strong> <span class="xs muted"><?= e(Permissions::GROUPS[$group] ?? '') ?></span></td></tr>
+          <?php endif; ?>
           <tr>
-            <td><div class="small" style="font-weight:500"><?= e($label) ?></div><div class="xs muted mono"><?= e($code) ?></div></td>
+            <td title="<?= e($desc) ?>"><div class="small" style="font-weight:500"><?= e($label) ?></div><div class="xs muted mono"><?= e($code) ?></div></td>
             <?php foreach ($roles as $r):
                 $has = in_array($code, $perms[$r['id']] ?? [], true);
                 $locked = (int) $r['id'] === Roles::OWNER; ?>

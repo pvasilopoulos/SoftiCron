@@ -4,7 +4,10 @@ use App\Auth\Auth;
 use App\Services\CronHelper;
 
 $tz = Auth::tenant()['timezone'];
-$canManage = Auth::can('jobs.manage');
+$canCreate = Auth::can('jobs.create');
+$canEdit = Auth::can('jobs.edit');
+$canToggle = Auth::can('jobs.toggle');
+$canDelete = Auth::can('jobs.delete');
 $canRun = Auth::can('jobs.run');
 $filters = ['all' => ['Όλα', $counts['all_count']], 'active' => ['Ενεργά', $counts['active']], 'issue' => ['Με πρόβλημα', $counts['issue']], 'paused' => ['Σε παύση', $counts['paused']]];
 ?>
@@ -13,7 +16,11 @@ $filters = ['all' => ['Όλα', $counts['all_count']], 'active' => ['Ενεργ�
     <h1>Jobs</h1>
     <p class="sub"><?= (int) $counts['all_count'] ?> jobs · <?= (int) $counts['active'] ?> ενεργά</p>
   </div>
-  <?php if ($canManage): ?><a class="btn btn-primary" href="<?= e(url('jobs/new')) ?>"><?= icon('plus', 16) ?>Νέο job</a><?php endif; ?>
+  <div class="row">
+    <?php if (Auth::can('jobs.import')): ?><a class="btn" href="<?= e(url('jobs/import')) ?>"><?= icon('upload', 16) ?><span>Εισαγωγή</span></a><?php endif; ?>
+    <?php if (Auth::can('jobs.export') && (int) $counts['all_count'] > 0): ?><a class="btn" href="<?= e(url('jobs/export', array_filter(['group' => $group]))) ?>" title="<?= $group !== '' ? 'Εξαγωγή των jobs της ομάδας' : 'Εξαγωγή όλων των jobs' ?>"><?= icon('download', 16) ?><span>Εξαγωγή</span></a><?php endif; ?>
+    <?php if ($canCreate): ?><a class="btn btn-primary" href="<?= e(url('jobs/new')) ?>"><?= icon('plus', 16) ?>Νέο job</a><?php endif; ?>
+  </div>
 </div>
 
 <div class="row">
@@ -47,7 +54,7 @@ $filters = ['all' => ['Όλα', $counts['all_count']], 'active' => ['Ενεργ�
   <?php if (!$page['rows']): ?>
     <div class="empty"><?= icon('jobs', 40) ?>
       <span><?= $q !== '' || $filter !== 'all' ? 'Κανένα job δεν ταιριάζει με τα φίλτρα.' : 'Δεν έχεις δημιουργήσει jobs ακόμα.' ?></span>
-      <?php if ($canManage && $q === '' && $filter === 'all'): ?><a class="btn btn-primary" href="<?= e(url('jobs/new')) ?>">Νέο job</a><?php endif; ?>
+      <?php if ($canCreate && $q === '' && $filter === 'all'): ?><a class="btn btn-primary" href="<?= e(url('jobs/new')) ?>">Νέο job</a><?php endif; ?>
     </div>
   <?php else: ?>
     <div class="table-wrap">
@@ -72,7 +79,7 @@ $filters = ['all' => ['Όλα', $counts['all_count']], 'active' => ['Ενεργ�
                 <?php if ((int) $st['failing'] > 0): ?><span class="badge fail"><?= (int) $st['failing'] ?> με πρόβλημα</span><?php endif; ?>
                 <span class="grow"></span>
                 <?php if ($group === ''): ?><a class="xs" href="<?= e(url('jobs', ['group' => $g === '' ? '__none' : $g, 'filter' => $filter])) ?>">Μόνο αυτή</a><?php endif; ?>
-                <?php if ($canManage && $g !== ''): ?><a class="xs" href="<?= e(url('jobs/new', ['group' => $g])) ?>">+ Νέο job εδώ</a><?php endif; ?>
+                <?php if ($canCreate && $g !== ''): ?><a class="xs" href="<?= e(url('jobs/new', ['group' => $g])) ?>">+ Νέο job εδώ</a><?php endif; ?>
               </div>
             </td>
           </tr>
@@ -81,14 +88,18 @@ $filters = ['all' => ['Όλα', $counts['all_count']], 'active' => ['Ενεργ�
             <td class="primary">
               <div class="stack-sm" style="gap:4px;min-width:0">
                 <a class="strong" href="<?= e(url('jobs/' . $j['id'] . '/edit')) ?>"><?= e($j['name']) ?></a>
-                <div class="row" style="gap:8px;flex-wrap:nowrap;min-width:0"><span class="pill"><?= e($j['method']) ?></span><span class="mono xs muted" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:260px"><?= e($j['url']) ?></span></div>
+                <?php if ($j['type'] === 'heartbeat'): ?>
+                  <div class="row" style="gap:8px;flex-wrap:nowrap;min-width:0"><span class="pill" style="background:var(--accent-soft);color:var(--accent-text)">HEARTBEAT</span><span class="xs muted"><?= $j['last_ping_at'] ? 'τελευταίο ping ' . e(rel_time($j['last_ping_at'])) : 'δεν έχει έρθει ping' ?></span></div>
+                <?php else: ?>
+                  <div class="row" style="gap:8px;flex-wrap:nowrap;min-width:0"><span class="pill"><?= e($j['method']) ?></span><span class="mono xs muted" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:260px"><?= e($j['url']) ?></span></div>
+                <?php endif; ?>
               </div>
             </td>
             <td data-label="Πρόγραμμα" class="small"><?= e(CronHelper::describe($j['cron_expr'])) ?></td>
             <td data-label="Τελευταία"><div class="row" style="gap:8px;justify-content:flex-end;justify-content:inherit"><?= $j['enabled'] ? status_badge($j['last_status']) : '<span class="badge off"><span class="dot"></span>Σε παύση</span>' ?><span class="xs muted"><?= e(rel_time($j['last_run_at'])) ?></span></div></td>
             <td data-label="Επόμενη" class="small muted"><?= $j['enabled'] && $j['next_run_at'] ? e(fmt_dt($j['next_run_at'], $tz, 'd/m H:i')) : '—' ?></td>
             <td data-label="Ενεργό" class="num">
-              <?php if ($canManage): ?>
+              <?php if ($canToggle): ?>
                 <form method="post" action="<?= e(url('jobs/' . $j['id'] . '/toggle')) ?>" class="inline" data-toggle-form>
                   <?= csrf_field() ?>
                   <label class="switch" title="<?= $j['enabled'] ? 'Παύση' : 'Ενεργοποίηση' ?>">
@@ -102,15 +113,15 @@ $filters = ['all' => ['Όλα', $counts['all_count']], 'active' => ['Ενεργ�
             </td>
             <td class="num" data-label="Ενέργειες">
               <div class="row" style="gap:6px;flex-wrap:nowrap;justify-content:flex-end">
-                <?php if ($canRun): ?>
+                <?php if ($canRun && $j['type'] !== 'heartbeat'): ?>
                   <form method="post" action="<?= e(url('jobs/' . $j['id'] . '/run')) ?>" class="inline" data-loading>
                     <?= csrf_field() ?>
                     <input type="hidden" name="from" value="list">
                     <button class="btn btn-sm" type="submit" title="Εκτέλεση τώρα" aria-label="<?= e('Εκτέλεση τώρα: ' . $j['name']) ?>"><?= icon('play', 14) ?><span>Εκτέλεση</span></button>
                   </form>
                 <?php endif; ?>
-                <a class="btn btn-sm btn-icon" href="<?= e(url('jobs/' . $j['id'] . '/edit')) ?>" title="<?= $canManage ? 'Επεξεργασία' : 'Προβολή' ?>" aria-label="<?= e(($canManage ? 'Επεξεργασία: ' : 'Προβολή: ') . $j['name']) ?>" style="width:34px"><?= icon('edit', 14) ?></a>
-                <?php if ($canManage): ?>
+                <a class="btn btn-sm btn-icon" href="<?= e(url('jobs/' . $j['id'] . '/edit')) ?>" title="<?= $canEdit ? 'Επεξεργασία' : 'Προβολή' ?>" aria-label="<?= e(($canEdit ? 'Επεξεργασία: ' : 'Προβολή: ') . $j['name']) ?>" style="width:34px"><?= icon('edit', 14) ?></a>
+                <?php if ($canDelete): ?>
                   <form method="post" action="<?= e(url('jobs/' . $j['id'] . '/delete')) ?>" class="inline" data-confirm="<?= e('Να διαγραφεί οριστικά το job «' . $j['name'] . '» μαζί με το ιστορικό εκτελέσεών του;') ?>">
                     <?= csrf_field() ?>
                     <button class="btn btn-sm btn-icon btn-danger" type="submit" title="Διαγραφή" aria-label="<?= e('Διαγραφή: ' . $j['name']) ?>" style="width:34px"><?= icon('trash', 14) ?></button>

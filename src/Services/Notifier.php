@@ -169,6 +169,7 @@ final class Notifier
     public static function dispatch(string $event, array $job, ?array $run, array $tenant): void
     {
         $db = App::db();
+        InAppFeed::record($event, $job, $run, $tenant);
         $rules = $db->all('SELECT * FROM job_notifications WHERE job_id = ? AND event = ?', [$job['id'], $event]);
         if (!$rules) {
             return;
@@ -187,26 +188,71 @@ final class Notifier
                 }
             }
         }
+        // Quiet hours: only failures (and escalations) go out.
+        if ($event !== 'failed' && self::inQuietHours($tenant)) {
+            foreach ($rules as $rule) {
+                self::log($tenant, $job, $run, $event, $rule['channel'], '—', 'skipped', 'Ώρες ησυχίας: στέλνονται μόνο οι αποτυχίες.');
+            }
+            return;
+        }
         $ctx = self::context($event, $job, $run, $tenant);
         foreach ($rules as $rule) {
-            $channel = $rule['channel'];
-            $subjectR = $bodyR = null;
-            try {
-                [$subject, $body] = self::resolveTemplate((int) $tenant['id'], $event, self::templateChannel($channel), $rule['template_id'] ? (int) $rule['template_id'] : null);
-                $subjectR = trim(TemplateRenderer::render($subject, $ctx));
-                $bodyR = trim(TemplateRenderer::render($body, $ctx));
-                $targets = self::send($channel, $job, $tenant, $event, $subjectR, $bodyR, $ctx);
-                if (!$targets) {
-                    self::log($tenant, $job, $run, $event, $channel, '—', 'skipped', 'Δεν υπάρχει συσκευή για αποστολή (κανείς δεν έχει ενεργό push για αυτό το γεγονός).', $subjectR, $bodyR);
-                }
-                foreach ($targets as $t) {
-                    self::log($tenant, $job, $run, $event, $channel, $t, 'sent', null, $subjectR, $bodyR);
-                }
-            } catch (\Throwable $e) {
-                self::log($tenant, $job, $run, $event, $channel, self::$lastTarget ?? '—', 'failed', $e->getMessage(), $subjectR, $bodyR);
-            }
-            self::$lastTarget = null;
+            self::deliver($rule['channel'], $event, $event, $job, $run, $tenant, $ctx, $rule['template_id'] ? (int) $rule['template_id'] : null);
         }
+    }
+
+    /** Renders the template of $templateEvent and sends it on one channel, logging the outcome as $logEvent. */
+    private static function deliver(string $channel, string $templateEvent, string $logEvent, array $job, ?array $run, array $tenant, array $ctx, ?int $templateId, string $subjectPrefix = '', string $bodyPrefix = ''): void
+    {
+        $subjectR = $bodyR = null;
+        try {
+            [$subject, $body] = self::resolveTemplate((int) $tenant['id'], $templateEvent, self::templateChannel($channel), $templateId);
+            $subjectR = trim($subjectPrefix . TemplateRenderer::render($subject, $ctx));
+            $bodyR = trim($bodyPrefix . TemplateRenderer::render($body, $ctx));
+            $targets = self::send($channel, $job, $tenant, $templateEvent, $subjectR, $bodyR, $ctx);
+            if (!$targets) {
+                self::log($tenant, $job, $run, $logEvent, $channel, '—', 'skipped', 'Δεν υπάρχει συσκευή για αποστολή (κανείς δεν έχει ενεργό push για αυτό το γεγονός).', $subjectR, $bodyR);
+            }
+            foreach ($targets as $t) {
+                self::log($tenant, $job, $run, $logEvent, $channel, $t, 'sent', null, $subjectR, $bodyR);
+            }
+        } catch (\Throwable $e) {
+            self::log($tenant, $job, $run, $logEvent, $channel, self::$lastTarget ?? '—', 'failed', $e->getMessage(), $subjectR, $bodyR);
+        }
+        self::$lastTarget = null;
+    }
+
+    /** Escalation: the job keeps failing → send the failure message on the extra channels. */
+    public static function escalate(array $job, ?array $run, array $tenant): void
+    {
+        $channels = array_intersect(array_filter(explode(',', (string) $job['escalate_channels'])), array_keys(self::CHANNELS));
+        if (!$channels) {
+            return;
+        }
+        $ctx = self::context('failed', $job, $run, $tenant);
+        $minutes = $job['failing_since'] ? (int) round((time() - strtotime($job['failing_since'] . ' UTC')) / 60) : (int) $job['escalate_after_minutes'];
+        InAppFeed::record('escalated', $job, $run, $tenant, "Αποτυγχάνει εδώ και $minutes λεπτά");
+        foreach ($channels as $ch) {
+            self::deliver($ch, 'failed', 'escalated', $job, $run, $tenant, $ctx, null, '[ΚΛΙΜΑΚΩΣΗ] ', "Αποτυγχάνει συνεχώς εδώ και $minutes λεπτά.\n");
+        }
+    }
+
+    public static function inQuietHours(array $tenant): bool
+    {
+        $tid = (int) $tenant['id'];
+        if (Settings::get($tid, 'notify.quiet_enabled') !== '1') {
+            return false;
+        }
+        $from = (string) Settings::get($tid, 'notify.quiet_from', '23:00');
+        $to = (string) Settings::get($tid, 'notify.quiet_to', '07:00');
+        $now = (new \DateTimeImmutable('now', new \DateTimeZone($tenant['timezone'] ?: 'Europe/Athens')))->format('H:i');
+        return $from <= $to ? ($now >= $from && $now < $to) : ($now >= $from || $now < $to);
+    }
+
+    /** Label for events in logs (includes internal events such as escalation). */
+    public static function eventLabel(string $event): string
+    {
+        return self::EVENTS[$event] ?? ['escalated' => 'Κλιμάκωση', 'heartbeat' => 'Heartbeat'][$event] ?? $event;
     }
 
     /** @return array{0:string,1:string} */

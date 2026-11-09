@@ -71,6 +71,14 @@ return static function (RouteCollector $r): void {
     $r->post('/notifications/devices/{id:\d+}', [C\NotificationController::class, 'updateDevice']);
     $r->post('/notifications/devices/{id:\d+}/test', [C\NotificationController::class, 'testDevice']);
     $r->post('/notifications/test', [C\NotificationController::class, 'test']);
+    // In-app notification center (bell)
+    $r->get('/feed', [C\FeedController::class, 'index']);
+    $r->get('/feed/count', [C\FeedController::class, 'count']);
+    $r->post('/feed/read-all', [C\FeedController::class, 'readAll']);
+    $r->post('/feed/clear-read', [C\FeedController::class, 'clearRead']);
+    $r->post('/feed/{id:\d+}/read', [C\FeedController::class, 'read']);
+    $r->post('/feed/{id:\d+}/unread', [C\FeedController::class, 'unread']);
+    $r->post('/feed/{id:\d+}/delete', [C\FeedController::class, 'delete']);
 
     // Users & roles
     $r->get('/users', [C\UserController::class, 'index']);
@@ -90,6 +98,17 @@ return static function (RouteCollector $r): void {
     $r->post('/roles/{id:\d+}', [C\RoleController::class, 'update']);
     $r->post('/roles/{id:\d+}/delete', [C\RoleController::class, 'delete']);
 
+    // Reports & SLA
+    $r->get('/reports', [C\ReportController::class, 'index']);
+    $r->get('/reports/export', [C\ReportController::class, 'export']);
+    $r->post('/reports/email', [C\ReportController::class, 'email']);
+
+    // Variables & secrets
+    $r->get('/variables', [C\VariableController::class, 'index']);
+    $r->post('/variables', [C\VariableController::class, 'store']);
+    $r->post('/variables/{id:\d+}', [C\VariableController::class, 'update']);
+    $r->post('/variables/{id:\d+}/delete', [C\VariableController::class, 'delete']);
+
     // Audit, settings, profile
     $r->get('/audit', [C\AuditController::class, 'index']);
     $r->get('/audit/export', [C\AuditController::class, 'export']);
@@ -97,6 +116,7 @@ return static function (RouteCollector $r): void {
     $r->post('/settings', [C\SettingsController::class, 'update']);
     $r->post('/settings/branding', [C\SettingsController::class, 'branding']);
     $r->post('/settings/menu', [C\SettingsController::class, 'menu']);
+    $r->post('/settings/status', [C\SettingsController::class, 'status']);
     $r->get('/branding/{id:\d+}/logo', [C\SettingsController::class, 'logo']);
     $r->get('/profile', [C\ProfileController::class, 'index']);
     $r->post('/profile', [C\ProfileController::class, 'update']);
@@ -110,6 +130,44 @@ return static function (RouteCollector $r): void {
     $r->post('/admin/tenants/{id:\d+}', [C\AdminController::class, 'updateTenant']);
     $r->post('/admin/tenants/{id:\d+}/enter', [C\AdminController::class, 'enterTenant']);
     $r->get('/admin/system', [C\AdminController::class, 'system']);
+
+    // Public status page
+    $r->get('/status/{slug:[a-z0-9\-]+}.json', [C\StatusController::class, 'json']);
+    $r->get('/status/{slug:[a-z0-9\-]+}', [C\StatusController::class, 'show']);
+
+    // Heartbeat pings (public, GET or POST)
+    $r->addRoute(['GET', 'POST'], '/ping/{token:[a-f0-9]{32}}', [C\PingController::class, 'success']);
+    $r->addRoute(['GET', 'POST'], '/ping/{token:[a-f0-9]{32}}/start', [C\PingController::class, 'start']);
+    $r->addRoute(['GET', 'POST'], '/ping/{token:[a-f0-9]{32}}/fail', [C\PingController::class, 'fail']);
+
+    // REST API v1 (stateless, Bearer token)
+    $r->addGroup('/api/v1', function (RouteCollector $r): void {
+        $r->get('/me', [C\ApiController::class, 'me']);
+        $r->get('/jobs', [C\ApiController::class, 'jobs']);
+        $r->post('/jobs', [C\ApiController::class, 'createJob']);
+        $r->get('/jobs/{id:\d+}', [C\ApiController::class, 'job']);
+        $r->addRoute(['PUT', 'PATCH'], '/jobs/{id:\d+}', [C\ApiController::class, 'updateJob']);
+        $r->delete('/jobs/{id:\d+}', [C\ApiController::class, 'deleteJob']);
+        $r->post('/jobs/{id:\d+}/run', [C\ApiController::class, 'run']);
+        $r->post('/jobs/{id:\d+}/pause', [C\ApiController::class, 'pause']);
+        $r->post('/jobs/{id:\d+}/resume', [C\ApiController::class, 'resume']);
+        $r->get('/runs', [C\ApiController::class, 'runs']);
+        $r->get('/runs/{id:\d+}', [C\ApiController::class, 'runShow']);
+        $r->get('/reports/summary', [C\ApiController::class, 'report']);
+    });
+
+    // API tokens & docs (UI)
+    $r->get('/api-tokens', [C\ApiTokenController::class, 'index']);
+    $r->post('/api-tokens', [C\ApiTokenController::class, 'store']);
+    $r->post('/api-tokens/{id:\d+}/revoke', [C\ApiTokenController::class, 'revoke']);
+    $r->get('/api-docs', [C\ApiTokenController::class, 'docs']);
+
+    // Job import/export & versions
+    $r->get('/jobs/export', [C\JobIoController::class, 'export']);
+    $r->get('/jobs/import', [C\JobIoController::class, 'importForm']);
+    $r->post('/jobs/import', [C\JobIoController::class, 'import']);
+    $r->get('/jobs/{id:\d+}/versions', [C\JobIoController::class, 'versions']);
+    $r->post('/jobs/{id:\d+}/versions/{vid:\d+}/restore', [C\JobIoController::class, 'restore']);
 
     // PWA
     $r->get('/manifest.webmanifest', [C\PwaController::class, 'manifest']);

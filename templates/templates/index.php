@@ -13,7 +13,9 @@ if ($f['q'] !== '') { $chips[] = ['«' . $f['q'] . '»', $link(['q' => ''])]; }
 ?>
 <div class="page-head">
   <div><h1>Templates μηνυμάτων</h1><p class="sub">Το κείμενο κάθε ειδοποίησης, ανά γεγονός και κανάλι · <?= (int) $total ?> templates</p></div>
+  <?php if (\App\Auth\Auth::can('templates.manage')): ?>
   <a class="btn btn-primary" href="<?= e(url('templates/new', ['event' => $f['event'], 'channel' => $f['channel']])) ?>"><?= icon('plus', 16) ?>Νέο template</a>
+  <?php endif; ?>
 </div>
 
 <form class="card filters" method="get" action="<?= e(url('templates')) ?>">
@@ -49,7 +51,9 @@ if ($f['q'] !== '') { $chips[] = ['«' . $f['q'] . '»', $link(['q' => ''])]; }
       <h2><?= e(Notifier::EVENTS[$event] ?? $event) ?></h2>
       <span class="xs muted"><?= count($items) ?> templates</span>
       <span class="grow"></span>
+      <?php if (\App\Auth\Auth::can('templates.manage')): ?>
       <a class="btn btn-sm btn-ghost" href="<?= e(url('templates/new', ['event' => $event])) ?>"><?= icon('plus', 14) ?>Νέο</a>
+      <?php endif; ?>
     </header>
     <?php foreach ($items as $t): ?>
       <div class="tpl-row">
@@ -66,8 +70,11 @@ if ($f['q'] !== '') { $chips[] = ['«' . $f['q'] . '»', $link(['q' => ''])]; }
           <span class="tpl-preview"><?= e(preg_replace('/\s+/u', ' ', (string) $t['body'])) ?></span>
         </div>
         <div class="row-actions">
+          <?php if (\App\Auth\Auth::can('templates.test')): ?>
           <form method="post" action="<?= e(url('templates/' . $t['id'] . '/test')) ?>" class="inline" data-loading><?= csrf_field() ?><button class="btn btn-sm" type="submit" title="Δοκιμαστική αποστολή σε εσένα, με δείγμα δεδομένων"><?= icon('send', 14) ?>Δοκιμή</button></form>
+          <?php endif; ?>
           <a class="btn btn-sm btn-icon" href="<?= e(url('templates/' . $t['id'] . '/edit')) ?>" title="Επεξεργασία" aria-label="<?= e('Επεξεργασία: ' . $t['name']) ?>"><?= icon('edit', 14) ?></a>
+          <?php if (\App\Auth\Auth::can('templates.manage')): ?>
           <details class="notif-details">
             <summary class="btn btn-sm btn-icon" title="Περισσότερα" aria-label="Περισσότερες ενέργειες">⋯</summary>
             <div class="notif-panel stack-sm" style="width:240px">
@@ -79,6 +86,7 @@ if ($f['q'] !== '') { $chips[] = ['«' . $f['q'] . '»', $link(['q' => ''])]; }
               <form method="post" action="<?= e(url('templates/' . $t['id'] . '/delete')) ?>" data-confirm="<?= e('Να διαγραφεί το template «' . $t['name'] . '»;') ?>"><?= csrf_field() ?><button class="btn btn-sm btn-danger" type="submit" style="width:100%;justify-content:flex-start"><?= icon('trash', 14) ?>Διαγραφή</button></form>
             </div>
           </details>
+          <?php endif; ?>
         </div>
       </div>
     <?php endforeach; ?>

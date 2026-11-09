@@ -36,6 +36,8 @@ final class Scheduler
             $this->recoverStuck();
             $this->scheduleDue();
             $this->process($deadline);
+            $this->escalate();
+            Reports::sendWeeklyDue();
             $this->maintenance();
         } finally {
             $this->db->value("SELECT RELEASE_LOCK('cronapp_scheduler')");
@@ -68,6 +70,14 @@ final class Scheduler
         foreach ($jobs as $job) {
             $tz = $job['timezone'] ?: $job['tenant_tz'];
             try {
+                if (($job['type'] ?? 'http') === 'heartbeat') {
+                    if (!$this->checkHeartbeat($job, $now)) {
+                        continue; // still inside the grace period
+                    }
+                    $next = CronHelper::nextRuns($job['cron_expr'], $tz, 1, $job['active_from'], $job['active_until'], $now)[0] ?? null;
+                    $this->db->update('jobs', ['next_run_at' => $next?->format('Y-m-d H:i:s')], 'id = :id', ['id' => $job['id']]);
+                    continue;
+                }
                 if ($job['next_run_at'] !== null) {
                     $due = new \DateTimeImmutable($job['next_run_at'], new \DateTimeZone('UTC'));
                     $late = $now->getTimestamp() - $due->getTimestamp();
@@ -83,6 +93,41 @@ final class Scheduler
                 $this->db->update('jobs', ['next_run_at' => null, 'enabled' => 0], 'id = :id', ['id' => $job['id']]);
             }
         }
+    }
+
+    /**
+     * Heartbeat: a ping is expected around next_run_at (± grace). Returns false while still waiting,
+     * true when the slot is settled (ping arrived, or a "missing ping" failure was recorded).
+     */
+    private function checkHeartbeat(array $job, \DateTimeImmutable $now): bool
+    {
+        if ($job['next_run_at'] === null) {
+            return true;
+        }
+        $grace = max(1, (int) $job['grace_minutes']) * 60;
+        $due = strtotime($job['next_run_at'] . ' UTC');
+        if ($now->getTimestamp() < $due + $grace) {
+            return false;
+        }
+        $lastPing = $job['last_ping_at'] ? strtotime($job['last_ping_at'] . ' UTC') : 0;
+        if ($lastPing >= $due - $grace) {
+            return true; // the ping for this slot arrived (the ping endpoint already recorded the run)
+        }
+        $deadline = gmdate('Y-m-d H:i:s', $due + $grace);
+        $runId = $this->db->insert('job_runs', [
+            'tenant_id' => $job['tenant_id'], 'job_id' => $job['id'], 'trigger_type' => 'ping', 'status' => 'failed',
+            'scheduled_at' => $job['next_run_at'], 'started_at' => $deadline, 'finished_at' => $this->db->now(), 'attempts' => 0,
+            'request_method' => 'PING',
+            'error' => 'Δεν ήρθε ping. Αναμενόταν ' . fmt_dt($job['next_run_at'], $job['timezone'] ?: 'Europe/Athens', 'd/m H:i') . ' (περιθώριο ' . (int) $job['grace_minutes'] . ' λεπτά).',
+        ], true);
+        if ($runId) {
+            $this->stats['missed']++;
+            $this->db->update('jobs', ['last_status' => 'failed', 'last_run_at' => $deadline], 'id = :id', ['id' => $job['id']]);
+            $run = $this->db->one('SELECT * FROM job_runs WHERE id = ?', [$runId]);
+            $tenant = $this->db->one('SELECT * FROM tenants WHERE id = ?', [$job['tenant_id']]);
+            self::afterOutcome($job, $run, $tenant, false);
+        }
+        return true;
     }
 
     private function recordMissed(array $job, \DateTimeImmutable $due): void
@@ -182,6 +227,7 @@ final class Scheduler
     public function executeClaimed(array $runIds): void
     {
         $requests = [];
+        $preFailed = [];
         $meta = [];
         foreach ($runIds as $id) {
             $run = $this->db->one('SELECT * FROM job_runs WHERE id = ?', [$id]);
@@ -195,20 +241,29 @@ final class Scheduler
                 [$job['id'], $id],
             );
             $ctx = TemplateRenderer::requestContext($job, $tenant, $run, $prevAt);
-            $req = HttpExecutor::buildRequest($job, $ctx);
-            $requests[$id] = $req;
+            try {
+                $req = HttpExecutor::buildRequest($job, $ctx);
+                $requests[$id] = $req;
+            } catch (\Throwable $e) {
+                // e.g. OAuth2 token could not be obtained: fail this attempt without calling the URL.
+                $req = ['method' => $job['method'], 'url' => (string) $job['url'], 'headers' => [], 'body' => null, 'timeout' => 1];
+                $preFailed[$id] = ['ok' => false, 'http_status' => null, 'duration_ms' => 0, 'headers' => '', 'body' => '', 'size' => 0, 'truncated' => false, 'error' => $e->getMessage()];
+            }
             $meta[$id] = [$run, $job, $tenant, $req];
         }
-        if (!$requests) {
+        if (!$meta) {
             return;
         }
         $attemptStart = $this->db->now();
-        $results = HttpExecutor::executeMany($requests);
+        $results = ($requests ? HttpExecutor::executeMany($requests) : []) + $preFailed;
         foreach ($results as $id => $res) {
             [$run, $job, $tenant, $req] = $meta[$id];
             $this->stats['executed']++;
             $attempt = (int) $run['attempts'] + 1;
             [$ok, $reason] = HttpExecutor::evaluate($job, $res);
+            if (($job['auth_type'] ?? '') === 'oauth2' && (int) $res['http_status'] === 401) {
+                JobAuth::invalidate((int) $job['id']); // token rejected: the retry fetches a new one
+            }
             $this->db->insert('job_run_attempts', [
                 'run_id' => $id, 'attempt_no' => $attempt, 'started_at' => $attemptStart,
                 'duration_ms' => $res['duration_ms'], 'http_status' => $res['http_status'], 'error' => $ok ? null : mb_substr((string) $reason, 0, 1000),
@@ -218,7 +273,7 @@ final class Scheduler
                 'http_status' => $res['http_status'],
                 'duration_ms' => $res['duration_ms'],
                 'request_method' => $req['method'],
-                'request_url' => mb_substr($req['url'], 0, 2048),
+                'request_url' => mb_substr((string) Variables::mask((int) $job['tenant_id'], $req['url']), 0, 2048),
                 'response_headers' => $res['headers'] !== '' ? $res['headers'] : null,
                 'response_body' => $res['body'] !== '' ? $res['body'] : null,
                 'response_size' => $res['size'],
@@ -251,21 +306,82 @@ final class Scheduler
             ], 'id = :id', ['id' => $job['id']]);
 
             $fresh = $this->db->one('SELECT * FROM job_runs WHERE id = ?', [$id]);
-            $prev = $job['last_status'];
-            try {
-                if ($ok) {
-                    if ($prev === 'failed') {
-                        Notifier::dispatch('recovered', $job, $fresh, $tenant);
-                    }
-                    if ($slow) {
-                        Notifier::dispatch('slow', $job, $fresh, $tenant);
-                    }
-                    Notifier::dispatch('succeeded', $job, $fresh, $tenant);
-                } else {
-                    Notifier::dispatch('failed', $job, $fresh, $tenant);
+            self::afterOutcome($job, $fresh, $tenant, $ok, (bool) $slow);
+        }
+    }
+
+    /** Consecutive failed runs of a job, newest first, up to the last success. */
+    public static function failStreak(int $jobId, ?int $beforeRunId = null): int
+    {
+        $rows = App::db()->column(
+            "SELECT status FROM job_runs WHERE job_id = ? AND status IN ('success','failed')" . ($beforeRunId ? ' AND id < ' . (int) $beforeRunId : '') . ' ORDER BY id DESC LIMIT 100',
+            [$jobId],
+        );
+        $n = 0;
+        foreach ($rows as $s) {
+            if ($s !== 'failed') {
+                break;
+            }
+            $n++;
+        }
+        return $n;
+    }
+
+    /**
+     * Incident bookkeeping + notifications after a final run outcome (HTTP or heartbeat).
+     * $job is the row as it was BEFORE this run (last_status = previous outcome).
+     */
+    public static function afterOutcome(array $job, array $run, array $tenant, bool $ok, bool $slow = false): void
+    {
+        $db = App::db();
+        $threshold = max(1, (int) ($job['notify_after_failures'] ?? 1));
+        try {
+            if ($ok) {
+                $prevStreak = self::failStreak((int) $job['id'], (int) $run['id']);
+                $db->update('jobs', ['failing_since' => null, 'escalated_at' => null], 'id = :id', ['id' => $job['id']]);
+                // Announce recovery only if the failure had been announced.
+                if ($prevStreak >= $threshold) {
+                    Notifier::dispatch('recovered', $job, $run, $tenant);
                 }
+                if ($slow) {
+                    Notifier::dispatch('slow', $job, $run, $tenant);
+                }
+                Notifier::dispatch('succeeded', $job, $run, $tenant);
+            } else {
+                if (empty($job['failing_since'])) {
+                    $db->update('jobs', ['failing_since' => $run['started_at'] ?? $db->now()], 'id = :id', ['id' => $job['id']]);
+                }
+                $streak = self::failStreak((int) $job['id']);
+                if ($streak >= $threshold) {
+                    // Throttling in Notifier looks at the previous announced failure.
+                    $job['last_status'] = $streak > $threshold ? 'failed' : 'success';
+                    Notifier::dispatch('failed', $job, $run, $tenant);
+                }
+            }
+        } catch (\Throwable $e) {
+            App::log('notify error run ' . $run['id'] . ': ' . $e->getMessage());
+        }
+    }
+
+    /** Sends escalation notifications for jobs failing longer than their threshold. */
+    private function escalate(): void
+    {
+        $jobs = $this->db->all(
+            "SELECT j.* FROM jobs j JOIN tenants t ON t.id = j.tenant_id
+             WHERE j.enabled = 1 AND t.status = 'active' AND j.last_status = 'failed'
+               AND j.escalate_after_minutes IS NOT NULL AND j.escalate_channels IS NOT NULL AND j.escalate_channels <> ''
+               AND j.failing_since IS NOT NULL AND j.escalated_at IS NULL
+               AND j.failing_since <= UTC_TIMESTAMP() - INTERVAL j.escalate_after_minutes MINUTE",
+        );
+        foreach ($jobs as $job) {
+            $this->db->update('jobs', ['escalated_at' => $this->db->now()], 'id = :id', ['id' => $job['id']]);
+            $run = $this->db->one("SELECT * FROM job_runs WHERE job_id = ? AND status = 'failed' ORDER BY id DESC LIMIT 1", [$job['id']]);
+            $tenant = $this->db->one('SELECT * FROM tenants WHERE id = ?', [$job['tenant_id']]);
+            try {
+                Notifier::escalate($job, $run, $tenant);
+                Audit::log('job.escalated', 'job', $job['id'], $job['name'] . ' → ' . $job['escalate_channels'], tenantId: (int) $job['tenant_id']);
             } catch (\Throwable $e) {
-                App::log('notify error run ' . $id . ': ' . $e->getMessage());
+                App::log('escalation error job ' . $job['id'] . ': ' . $e->getMessage());
             }
         }
     }
@@ -286,6 +402,7 @@ final class Scheduler
         $this->db->exec('DELETE FROM login_attempts WHERE created_at < ?', [gmdate('Y-m-d H:i:s', time() - 30 * 86400)]);
         $this->db->exec('DELETE FROM invitations WHERE accepted_at IS NULL AND expires_at < ?', [gmdate('Y-m-d H:i:s', time() - 30 * 86400)]);
         $this->db->exec('DELETE FROM audit_logs WHERE created_at < ?', [gmdate('Y-m-d H:i:s', time() - 365 * 86400)]);
+        InAppFeed::cleanup();
     }
 
     /** Recomputes next_run_at after a job is created/edited/enabled. */

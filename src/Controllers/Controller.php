@@ -61,6 +61,14 @@ abstract class Controller
         }
     }
 
+    protected function authorizeAny(array $permissions): void
+    {
+        $this->tenant();
+        if (!Auth::canAny($permissions)) {
+            throw HttpException::forbidden();
+        }
+    }
+
     protected function superAdmin(): void
     {
         $this->user();

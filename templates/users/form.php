@@ -47,7 +47,7 @@ $isSelf = !$isNew && (int) $u['id'] === Auth::id();
       </label>
     <?php endif; ?>
     <div class="form-actions">
-      <?php if (!$isNew && !$isSelf): ?><button class="btn btn-danger" type="submit" form="user-del"><?= icon('trash', 16) ?>Διαγραφή</button><span class="grow"></span><?php endif; ?>
+      <?php if (!$isNew && !$isSelf && \App\Auth\Auth::can('users.delete')): ?><button class="btn btn-danger" type="submit" form="user-del"><?= icon('trash', 16) ?>Διαγραφή</button><span class="grow"></span><?php endif; ?>
       <a class="btn" href="<?= e(url('users')) ?>">Ακύρωση</a>
       <button class="btn btn-primary" type="submit">Αποθήκευση</button>
     </div>

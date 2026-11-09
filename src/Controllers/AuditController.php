@@ -95,7 +95,7 @@ final class AuditController extends Controller
 
     public function export(): Response
     {
-        $this->authorize('audit.view');
+        $this->authorize('audit.export');
         [$where, $p] = $this->filters();
         $tz = $this->tenant()['timezone'];
         $rows = $this->db->all("SELECT a.*, u.name AS user_name, u.email AS user_email $where ORDER BY a.id DESC LIMIT 20000", $p);

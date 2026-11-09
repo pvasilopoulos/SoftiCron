@@ -51,7 +51,9 @@ $moreOpen = $f['trigger'] !== '' || $f['http'] !== '' || $f['from'] !== '' || $f
     <p class="sub">Execution logs με request, response και προσπάθειες · <?= (int) $page['total'] ?> αποτελέσματα</p>
   </div>
   <div class="row">
+    <?php if (\App\Auth\Auth::can('runs.export')): ?>
     <a class="btn" href="<?= e(url('runs/export', $base)) ?>"><?= icon('copy', 16) ?>Εξαγωγή CSV</a>
+    <?php endif; ?>
   </div>
 </div>
 

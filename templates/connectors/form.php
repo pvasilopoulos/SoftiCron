@@ -49,7 +49,7 @@ $user = Auth::user();
   </form>
 
   <aside class="stack">
-    <?php if (!$isNew): ?>
+    <?php if (!$isNew && \App\Auth\Auth::can('connectors.test')): ?>
       <form method="post" action="<?= e(url('connectors/' . $conn['id'] . '/test')) ?>" class="card stack-sm" data-loading>
         <?= csrf_field() ?>
         <h2>Δοκιμαστικό μήνυμα</h2>
