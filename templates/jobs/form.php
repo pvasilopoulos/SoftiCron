@@ -281,6 +281,11 @@ if ($hasOld) {
           </select>
         </label>
       </div>
+      <?php if (isset($channels['sms']) || isset($channels['viber'])): ?>
+        <label class="field">Κινητά για SMS / Viber <span class="help">Κενό = τα προεπιλεγμένα από τις Ρυθμίσεις. Χώρισέ τα με κόμμα.</span>
+          <input class="input mono" name="notify_phones" value="<?= e($v('notify_phones')) ?>" placeholder="6912345678, +306987654321" inputmode="tel">
+        </label>
+      <?php endif; ?>
       <?php if (!$emailConnectors && !$telegramConnectors && Auth::can('connectors.manage')): ?>
         <p class="notice">Δεν έχεις ρυθμίσει connectors. <a href="<?= e(url('connectors/new')) ?>">Πρόσθεσε έναν</a> για email ή Telegram.</p>
       <?php endif; ?>

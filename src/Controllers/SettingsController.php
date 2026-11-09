@@ -43,6 +43,20 @@ final class SettingsController extends Controller
                 return $this->redirect('settings');
             }
         }
+        $phones = [];
+        foreach (preg_split('/[,;\n]+/', (string) $this->req->input('notify_phones', '')) ?: [] as $ph) {
+            if (trim($ph) === '') {
+                continue;
+            }
+            $n = \App\Services\Channels\RouteeSender::normalizePhone($ph);
+            if ($n === null) {
+                $this->flash('error', 'Μη έγκυρο κινητό: ' . trim($ph));
+                return $this->redirect('settings');
+            }
+            $phones[] = $n;
+        }
+        Settings::set($tid, 'notify.phones', implode(', ', array_unique($phones)));
+        Settings::set($tid, 'notify.sms_daily_limit', (string) max(0, min(100000, (int) $this->req->input('sms_daily_limit', \App\Services\Notifier::SMS_DAILY_LIMIT_DEFAULT))));
         $this->db->update('tenants', ['name' => $name, 'timezone' => $tz], 'id = :id', ['id' => $tid]);
         Settings::set($tid, 'notify.emails', $emails);
         Settings::set($tid, 'notify.telegram_chat', mb_substr((string) $this->req->input('notify_telegram_chat', ''), 0, 100));

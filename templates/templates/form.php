@@ -32,6 +32,7 @@ $val = fn (string $k) => old($k, $tpl[$k] ?? '');
     </label>
     <label class="field">Κείμενο
       <textarea class="textarea mono" name="body" rows="10" required spellcheck="false"><?= e($val('body')) ?></textarea>
+      <span class="help hidden" data-sms-count style="color:var(--accent-text)"></span>
       <span class="help">Telegram: χρησιμοποίησε **κείμενο** για έντονα. Υποστηρίζονται <code>{% if %}</code>, <code>{% for %}</code> και φίλτρα όπως <code>|upper</code>, <code>|default('—')</code>.</span>
     </label>
     <label class="check"><input type="checkbox" name="is_default" value="1" <?= $val('is_default') ? 'checked' : '' ?>>Προεπιλογή για αυτό το γεγονός και κανάλι</label>
@@ -69,7 +70,17 @@ document.addEventListener('DOMContentLoaded', () => {
   const ch = f.querySelector('[data-channel]');
   let last = body;
   [body, subj].forEach((el) => el.addEventListener('focus', () => { last = el; }));
-  const sync = () => f.querySelector('[data-subject]').classList.toggle('hidden', ch.value === 'telegram');
+  const smsCount = f.querySelector('[data-sms-count]');
+  const count = () => {
+    const len = body.value.replace(/\{\{[^}]*\}\}/g, 'xxxxxxxxxx').length;
+    smsCount.textContent = 'Περίπου ' + len + ' χαρακτήρες · έως 160 = 1 SMS (με μετατροπή ελληνικών) · Viber έως 1000';
+  };
+  const sync = () => {
+    f.querySelector('[data-subject]').classList.toggle('hidden', ch.value === 'telegram' || ch.value === 'sms');
+    smsCount.classList.toggle('hidden', ch.value !== 'sms');
+    count();
+  };
+  body.addEventListener('input', count);
   ch.addEventListener('change', sync); sync();
   document.querySelectorAll('[data-insert]').forEach((b) => b.addEventListener('click', () => {
     const t = b.dataset.insert, s = last.selectionStart ?? last.value.length, en = last.selectionEnd ?? s;

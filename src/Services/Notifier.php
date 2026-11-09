@@ -8,6 +8,7 @@ use App\Core\App;
 use App\Services\Channels\ChatSender;
 use App\Services\Channels\EmailSender;
 use App\Services\Channels\PushSender;
+use App\Services\Channels\RouteeSender;
 use App\Services\Channels\TelegramSender;
 
 /** Sends job event notifications through push, email and Telegram. */
@@ -25,17 +26,24 @@ final class Notifier
     public const CHANNELS = [
         'push' => 'Push', 'email' => 'Email', 'telegram' => 'Telegram',
         'slack' => 'Slack', 'teams' => 'Teams', 'discord' => 'Discord', 'webhook' => 'Webhook',
+        'sms' => 'SMS', 'viber' => 'Viber',
     ];
 
-    /** Channels that need a connector of the same type before they can be used. */
-    public const CONNECTOR_CHANNELS = ['slack', 'teams', 'discord', 'webhook'];
+    /** Channels that need a connector before they can be used. */
+    public const CONNECTOR_CHANNELS = ['slack', 'teams', 'discord', 'webhook', 'sms', 'viber'];
 
-    /** Template "channels": Slack/Teams/Discord/Webhook share the "chat" template. */
-    public const TEMPLATE_CHANNELS = ['email' => 'Email', 'telegram' => 'Telegram', 'push' => 'Push', 'chat' => 'Chat (Slack · Teams · Discord · Webhook)'];
+    /** Template "channels": chat apps share "chat", SMS and Viber share "sms". */
+    public const TEMPLATE_CHANNELS = ['email' => 'Email', 'telegram' => 'Telegram', 'push' => 'Push', 'chat' => 'Chat (Slack · Teams · Discord · Webhook)', 'sms' => 'SMS & Viber'];
+
+    public const SMS_DAILY_LIMIT_DEFAULT = 100;
 
     public static function templateChannel(string $channel): string
     {
-        return in_array($channel, self::CONNECTOR_CHANNELS, true) ? 'chat' : $channel;
+        return match ($channel) {
+            'slack', 'teams', 'discord', 'webhook' => 'chat',
+            'sms', 'viber' => 'sms',
+            default => $channel,
+        };
     }
 
     /** Channels available for jobs of this tenant (connector-based ones only if configured). */
@@ -44,11 +52,20 @@ final class Notifier
         $types = App::db()->column('SELECT DISTINCT type FROM connectors WHERE tenant_id = ?', [$tenantId]);
         $out = [];
         foreach (self::CHANNELS as $k => $l) {
-            if (!in_array($k, self::CONNECTOR_CHANNELS, true) || in_array($k, $types, true)) {
+            if (!in_array($k, self::CONNECTOR_CHANNELS, true) || array_intersect(Connectors::typesFor($k), $types)) {
                 $out[$k] = $l;
             }
         }
         return $out;
+    }
+
+    /** SMS + Viber messages sent by the tenant today (UTC day). */
+    public static function smsSentToday(int $tenantId): int
+    {
+        return (int) App::db()->value(
+            "SELECT COUNT(*) FROM notification_log WHERE tenant_id = ? AND channel IN ('sms','viber') AND status = 'sent' AND created_at >= ?",
+            [$tenantId, gmdate('Y-m-d 00:00:00')],
+        );
     }
 
     public const DEFAULT_USER_EVENTS = ['failed', 'recovered', 'missed'];
@@ -60,30 +77,35 @@ final class Notifier
             'telegram' => ['', "❌ **Αποτυχία: {{ job.name }}**\n{{ run.error }}\nHTTP {{ run.http_status|default('—') }} · {{ run.duration }} · {{ run.attempts }} προσπάθειες\n{{ run.link }}"],
             'push' => ['Αποτυχία: {{ job.name }}', "{{ run.error }} · {{ run.attempts }} προσπάθειες"],
             'chat' => ['❌ Αποτυχία: {{ job.name }}', "{{ run.error }}\nHTTP {{ run.http_status|default('—') }} · {{ run.duration }} · {{ run.attempts }} προσπάθειες · {{ run.started_at }}"],
+            'sms' => ['', "ΑΠΟΤΥΧΙΑ: {{ job.name }}\n{{ run.error }}\n{{ run.started_at }}"],
         ],
         'recovered' => [
             'email' => ['✅ Ανάκαμψη: {{ job.name }}', "Το job «{{ job.name }}» εκτελείται ξανά κανονικά.\n\nHTTP status: {{ run.http_status }}\nΔιάρκεια: {{ run.duration }}\nΏρα: {{ run.started_at }}"],
             'telegram' => ['', "✅ **Ανάκαμψη: {{ job.name }}**\nHTTP {{ run.http_status }} · {{ run.duration }}\n{{ run.link }}"],
             'push' => ['Ανάκαμψη: {{ job.name }}', 'Εκτελείται ξανά κανονικά · HTTP {{ run.http_status }}'],
             'chat' => ['✅ Ανάκαμψη: {{ job.name }}', 'Εκτελείται ξανά κανονικά · HTTP {{ run.http_status }} · {{ run.duration }}'],
+            'sms' => ['', "ΑΝΑΚΑΜΨΗ: {{ job.name }} λειτουργεί ξανά ({{ run.started_at }})"],
         ],
         'missed' => [
             'email' => ['⏰ Χαμένη εκτέλεση: {{ job.name }}', "Η εκτέλεση του «{{ job.name }}» για τις {{ run.scheduled_at }} δεν έγινε εγκαίρως, γιατί ο scheduler δεν έτρεχε.\nΈγινε εκτέλεση αναπλήρωσης."],
             'telegram' => ['', "⏰ **Χαμένη εκτέλεση: {{ job.name }}**\nΠρογραμματισμένη για {{ run.scheduled_at }}\n{{ run.link }}"],
             'push' => ['Χαμένη εκτέλεση: {{ job.name }}', 'Προγραμματισμένη για {{ run.scheduled_at }}'],
             'chat' => ['⏰ Χαμένη εκτέλεση: {{ job.name }}', 'Προγραμματισμένη για {{ run.scheduled_at }}. Ο scheduler δεν έτρεχε· έγινε εκτέλεση αναπλήρωσης.'],
+            'sms' => ['', "ΧΑΜΕΝΗ ΕΚΤΕΛΕΣΗ: {{ job.name }} ({{ run.scheduled_at }})"],
         ],
         'slow' => [
             'email' => ['🐢 Αργή απόκριση: {{ job.name }}', "Το job «{{ job.name }}» ολοκληρώθηκε σε {{ run.duration }}, πάνω από το όριο που έχει οριστεί."],
             'telegram' => ['', "🐢 **Αργή απόκριση: {{ job.name }}**\n{{ run.duration }}\n{{ run.link }}"],
             'push' => ['Αργή απόκριση: {{ job.name }}', 'Ολοκληρώθηκε σε {{ run.duration }}'],
             'chat' => ['🐢 Αργή απόκριση: {{ job.name }}', 'Ολοκληρώθηκε σε {{ run.duration }}, πάνω από το όριο.'],
+            'sms' => ['', "ΑΡΓΗ ΑΠΟΚΡΙΣΗ: {{ job.name }} σε {{ run.duration }}"],
         ],
         'succeeded' => [
             'email' => ['Επιτυχία: {{ job.name }}', "Το job «{{ job.name }}» εκτελέστηκε επιτυχώς.\nHTTP {{ run.http_status }} · {{ run.duration }} · {{ run.started_at }}"],
             'telegram' => ['', "✔️ **{{ job.name }}**\nHTTP {{ run.http_status }} · {{ run.duration }}"],
             'push' => ['Επιτυχία: {{ job.name }}', 'HTTP {{ run.http_status }} · {{ run.duration }}'],
             'chat' => ['✔️ Επιτυχία: {{ job.name }}', 'HTTP {{ run.http_status }} · {{ run.duration }} · {{ run.started_at }}'],
+            'sms' => ['', "OK: {{ job.name }} ({{ run.started_at }})"],
         ],
     ];
 
@@ -259,6 +281,45 @@ final class Notifier
             }
             return $res['sent_ids'] ? [self::deviceNames($res['sent_ids'])] : [];
         }
+        if ($channel === 'sms' || $channel === 'viber') {
+            $conn = Connectors::default($tid, $channel);
+            if (!$conn) {
+                throw new \RuntimeException('Δεν υπάρχει Routee connector.');
+            }
+            $phones = RouteeSender::parsePhones((string) ($job['notify_phones'] ?: Settings::get($tid, 'notify.phones', '')));
+            if (!$phones) {
+                throw new \RuntimeException('Δεν έχουν οριστεί κινητά για SMS/Viber.');
+            }
+            $limit = (int) Settings::get($tid, 'notify.sms_daily_limit', (string) self::SMS_DAILY_LIMIT_DEFAULT);
+            $cfg = Connectors::config($conn);
+            $sent = [];
+            $errors = [];
+            foreach ($phones as $phone) {
+                if ($limit > 0 && self::smsSentToday($tid) + count($sent) >= $limit) {
+                    $errors[] = "$phone: έφτασε το ημερήσιο όριο των $limit SMS/Viber";
+                    continue;
+                }
+                try {
+                    if ($channel === 'viber') {
+                        $used = RouteeSender::viber($cfg, $phone, $body);
+                        $sent[] = $phone . ($used === 'sms' ? ' (μέσω SMS)' : '');
+                    } else {
+                        RouteeSender::sms($cfg, $phone, $body);
+                        $sent[] = $phone;
+                    }
+                } catch (\RuntimeException $e) {
+                    $errors[] = "$phone: " . $e->getMessage();
+                }
+            }
+            self::$lastTarget = implode(', ', $phones);
+            if (!$sent) {
+                throw new \RuntimeException(implode('; ', $errors));
+            }
+            if ($errors) {
+                self::log($tenant, $job, null, $event, $channel, implode(', ', array_diff($phones, array_map(fn ($s) => explode(' ', $s)[0], $sent))), 'failed', implode('; ', $errors), $subject, $body, $ctx['run']['id'] ?? null);
+            }
+            return [implode(', ', $sent)];
+        }
         if (in_array($channel, self::CONNECTOR_CHANNELS, true)) {
             $conn = Connectors::default($tid, $channel);
             if (!$conn) {
@@ -301,6 +362,20 @@ final class Notifier
                     throw new \RuntimeException($res['errors'] ? implode('; ', $res['errors']) : 'Δεν έχεις ενεργή συσκευή για push.');
                 }
                 return $res['sent'] . ' συσκευές σου';
+            case 'sms':
+                $conn = Connectors::default($tid, 'sms') ?? throw new \RuntimeException('Δεν υπάρχει Routee connector.');
+                $phones = RouteeSender::parsePhones((string) Settings::get($tid, 'notify.phones', ''));
+                if (!$phones) {
+                    throw new \RuntimeException('Όρισε πρώτα προεπιλεγμένα κινητά στις Ρυθμίσεις → Ειδοποιήσεις.');
+                }
+                $cfg = Connectors::config($conn);
+                if (trim((string) ($cfg['viber_sender_id'] ?? '')) !== '') {
+                    $used = RouteeSender::viber($cfg, $phones[0], "[ΔΟΚΙΜΗ]\n" . $body);
+                } else {
+                    RouteeSender::sms($cfg, $phones[0], "[ΔΟΚΙΜΗ]\n" . $body);
+                    $used = 'sms';
+                }
+                return $phones[0] . ' (' . ($used === 'viber' ? 'Viber' : 'SMS') . ')';
             case 'chat':
                 $sent = [];
                 foreach (App::db()->all("SELECT * FROM connectors WHERE tenant_id = ? AND type IN ('slack','teams','discord','webhook') AND is_default = 1", [$tid]) as $conn) {

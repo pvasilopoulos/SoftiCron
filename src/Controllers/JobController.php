@@ -77,7 +77,7 @@ final class JobController extends Controller
             'body_type' => 'none', 'body' => '', 'cron_expr' => '*/5 * * * *', 'schedule_ui' => null,
             'timezone' => $tenant['timezone'], 'timeout_sec' => 30, 'max_retries' => 2, 'retry_strategy' => 'exponential',
             'retry_delay_sec' => 10, 'overlap_policy' => 'skip', 'success_codes' => '200-299', 'success_contains' => '',
-            'slow_threshold_ms' => '', 'active_from' => '', 'active_until' => '', 'notify_emails' => '', 'notify_telegram_chat' => '',
+            'slow_threshold_ms' => '', 'active_from' => '', 'active_until' => '', 'notify_emails' => '', 'notify_telegram_chat' => '', 'notify_phones' => '',
             'email_connector_id' => null, 'telegram_connector_id' => null, 'push_target' => 'all',
         ];
         $notify = ['failed' => ['push' => true, 'email' => true], 'recovered' => ['push' => true], 'missed' => ['email' => true]];
@@ -277,6 +277,18 @@ final class JobController extends Controller
         if ($scheduleUi !== '' && json_decode($scheduleUi) === null) {
             $scheduleUi = '';
         }
+        $phones = [];
+        foreach (preg_split('/[,;\n]+/', (string) $r->input('notify_phones', '')) ?: [] as $ph) {
+            if (trim($ph) === '') {
+                continue;
+            }
+            $n = \App\Services\Channels\RouteeSender::normalizePhone($ph);
+            if ($n === null) {
+                $errors[] = 'Μη έγκυρο κινητό: ' . trim($ph) . ' (π.χ. 69xxxxxxxx ή +3069xxxxxxxx)';
+            } elseif (!in_array($n, $phones, true)) {
+                $phones[] = $n;
+            }
+        }
         $group = trim((string) preg_replace('/\s+/u', ' ', (string) $r->input('group_name', '')));
         $data = [
             'name' => $name,
@@ -303,6 +315,7 @@ final class JobController extends Controller
             'active_until' => $until,
             'notify_emails' => $emails !== '' ? mb_substr($emails, 0, 500) : null,
             'notify_telegram_chat' => mb_substr((string) $r->input('notify_telegram_chat', ''), 0, 100) ?: null,
+            'notify_phones' => $phones ? mb_substr(implode(', ', $phones), 0, 500) : null,
             'email_connector_id' => $connector('email_connector_id', 'email'),
             'telegram_connector_id' => $connector('telegram_connector_id', 'telegram'),
             'push_target' => $r->input('push_target') === 'selected' ? 'selected' : 'all',
@@ -406,7 +419,7 @@ final class JobController extends Controller
 
     private function auditable(array $job): array
     {
-        $out = array_intersect_key($job, array_flip(['name', 'group_name', 'enabled', 'method', 'url', 'body_type', 'cron_expr', 'timezone', 'timeout_sec', 'max_retries', 'overlap_policy', 'success_codes', 'active_from', 'active_until', 'notify_emails']));
+        $out = array_intersect_key($job, array_flip(['name', 'group_name', 'notify_phones', 'enabled', 'method', 'url', 'body_type', 'cron_expr', 'timezone', 'timeout_sec', 'max_retries', 'overlap_policy', 'success_codes', 'active_from', 'active_until', 'notify_emails']));
         $out['headers'] = array_map(fn ($h) => $h['name'] . ': ' . (!empty($h['secret']) ? '••••' : $h['value']), HttpExecutor::headers($job));
         return $out;
     }

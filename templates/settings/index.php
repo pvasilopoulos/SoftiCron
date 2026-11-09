@@ -29,6 +29,16 @@ $logoUrl = $tenant['logo_path'] ? url('branding/' . $tenant['id'] . '/logo') . '
         <span class="help">Αν ένα job συνεχίζει να αποτυγχάνει, ειδοποίηση το πολύ μία φορά σε αυτό το διάστημα. 0 = κάθε φορά.</span>
       </label>
     </div>
+    <div class="form-grid">
+      <label class="field">Προεπιλεγμένα κινητά για SMS / Viber
+        <input class="input mono" name="notify_phones" value="<?= e($settings['notify.phones'] ?? '') ?>" placeholder="6912345678, +306987654321" inputmode="tel">
+        <span class="help">Χρησιμοποιούνται όταν ένα job δεν έχει δικά του κινητά</span>
+      </label>
+      <label class="field">Μέγιστα SMS / Viber ανά ημέρα
+        <input class="input" type="number" min="0" max="100000" name="sms_daily_limit" value="<?= e($settings['notify.sms_daily_limit'] ?? (string) App\Services\Notifier::SMS_DAILY_LIMIT_DEFAULT) ?>">
+        <span class="help">Προστασία του υπολοίπου σου στη Routee. 0 = χωρίς όριο. Σήμερα: <?= App\Services\Notifier::smsSentToday((int) $tenant['id']) ?></span>
+      </label>
+    </div>
     <h2 style="margin-top:8px">Όρια πλάνου</h2>
     <div class="kv">
       <div><span class="k">Μέγιστα jobs</span><span class="v"><?= (int) $tenant['max_jobs'] ?></span></div>

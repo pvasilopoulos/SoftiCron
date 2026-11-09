@@ -172,7 +172,7 @@ final class TemplateController extends Controller
         }
         return [[
             'name' => $name, 'event' => $event, 'channel' => $channel,
-            'subject' => $channel === 'telegram' ? null : ($subject !== '' ? $subject : null),
+            'subject' => in_array($channel, ['telegram', 'sms'], true) ? null : ($subject !== '' ? $subject : null),
             'body' => $body, 'is_default' => $this->req->input('is_default') ? 1 : 0,
         ], $errors];
     }

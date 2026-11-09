@@ -2,7 +2,7 @@
 /** @var array $grouped @var array $f @var int $total @var int $count */
 use App\Services\Notifier;
 
-$chIcon = ['email' => 'send', 'telegram' => 'send', 'push' => 'bell', 'chat' => 'connectors'];
+$chIcon = ['email' => 'send', 'telegram' => 'send', 'push' => 'bell', 'chat' => 'connectors', 'sms' => 'send'];
 $eventColor = ['failed' => '#DC2626', 'recovered' => '#16A34A', 'missed' => '#64748B', 'slow' => '#D97706', 'succeeded' => '#16A34A'];
 $base = array_filter($f, fn ($v) => $v !== '');
 $link = fn (array $c) => url('templates', array_filter(array_merge($base, $c), fn ($v) => $v !== ''));

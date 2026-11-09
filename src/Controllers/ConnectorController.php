@@ -99,6 +99,15 @@ final class ConnectorController extends Controller
             }
             $cfg[$key] = $input === 'number' ? (int) $v : $v;
         }
+        if ($type === 'routee') {
+            $from = (string) ($cfg['sms_from'] ?? '');
+            if ($from !== '' && !preg_match('/^(?=.*[A-Za-z])[A-Za-z0-9 .\-]{1,11}$|^\+?\d{1,16}$/', $from)) {
+                $errors[] = 'Ο αποστολέας SMS πρέπει να είναι έως 11 λατινικοί χαρακτήρες/αριθμοί ή αριθμός έως 16 ψηφία.';
+            }
+            if ($from === '' && trim((string) ($cfg['viber_sender_id'] ?? '')) === '') {
+                $errors[] = 'Συμπλήρωσε αποστολέα SMS ή/και Viber sender.';
+            }
+        }
         return [$cfg, $errors];
     }
 

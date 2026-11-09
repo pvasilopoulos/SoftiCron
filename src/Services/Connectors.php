@@ -19,6 +19,7 @@ final class Connectors
         'teams' => 'Microsoft Teams',
         'discord' => 'Discord',
         'webhook' => 'Webhook (JSON)',
+        'routee' => 'SMS & Viber · Routee',
     ];
 
     /** Catalog info for the "add connector" gallery: type => [channel, short description, brand colour, icon text] */
@@ -30,6 +31,7 @@ final class Connectors
         'teams' => ['teams', 'Κάρτες σε κανάλι Microsoft Teams μέσω Workflows webhook.', '#5B5FC7', 'T'],
         'discord' => ['discord', 'Μηνύματα σε κανάλι Discord μέσω webhook.', '#5865F2', 'D'],
         'webhook' => ['webhook', 'JSON POST σε δικό σου URL (n8n, Zapier, Make, δικό σου API), με υπογραφή HMAC.', '#0F172A', '{}'],
+        'routee' => ['sms', 'SMS και Viber μέσω Routee, με αυτόματη εναλλακτική αποστολή SMS αν αποτύχει το Viber.', '#E3003B', 'R'],
     ];
 
     /** Connector types that serve a notification channel. */
@@ -37,6 +39,7 @@ final class Connectors
     {
         return match ($channel) {
             'email' => ['smtp', 'm365'],
+            'sms', 'viber' => ['routee'],
             default => [$channel],
         };
     }
@@ -80,6 +83,14 @@ final class Connectors
             'url' => ['URL', 'url', true, false, 'Δέχεται POST με JSON (event, title, message, job, run, tenant)'],
             'secret' => ['Secret για υπογραφή (προαιρετικό)', 'password', false, true, 'Αν οριστεί, στέλνεται header X-CronApp-Signature: sha256=HMAC(body)'],
         ],
+        'routee' => [
+            'app_id' => ['Application ID', 'text', true, false, 'Routee platform → Applications'],
+            'app_secret' => ['Application secret', 'password', true, true, ''],
+            'sms_from' => ['Αποστολέας SMS', 'text', false, false, 'Έως 11 λατινικοί χαρακτήρες (π.χ. SoftiCron) ή αριθμός. Πρέπει να είναι εγκεκριμένος στη Routee.'],
+            'transcode' => ['Ελληνικά στα SMS', 'select:1=Μετατροπή σε GSM (φθηνότερα SMS),0=Unicode (ακριβώς όπως γράφτηκαν)', true, false, 'Τα πεζά ελληνικά σε Unicode χωράνε 70 αντί για 160 χαρακτήρες ανά SMS'],
+            'viber_sender_id' => ['Viber sender (senderInfoTrackingId)', 'text', false, false, 'Από το Routee platform → Applications. Χρειάζεται μόνο για Viber.'],
+            'viber_fallback_sms' => ['Αν αποτύχει το Viber', 'select:1=Αποστολή SMS αντί για Viber,0=Καμία εναλλακτική', true, false, ''],
+        ],
     ];
 
     public static function find(int $tenantId, ?int $id): ?array
@@ -122,6 +133,26 @@ final class Connectors
         if ($connector['type'] === 'telegram') {
             $chat = $target !== '' ? $target : (string) ($cfg['default_chat_id'] ?? '');
             TelegramSender::send($cfg, $chat, '✅ <b>' . e($title) . "</b>\n" . e($text));
+            return;
+        }
+        if ($connector['type'] === 'routee') {
+            $phone = \App\Services\Channels\RouteeSender::normalizePhone($target);
+            if ($phone === null) {
+                throw new \RuntimeException('Γράψε έγκυρο κινητό για τη δοκιμή (π.χ. 69xxxxxxxx ή +3069xxxxxxxx).');
+            }
+            $msg = 'Δοκιμή από ' . App::name() . ': ο connector «' . $connector['name'] . '» λειτουργεί.';
+            $parts = [];
+            if (trim((string) ($cfg['sms_from'] ?? '')) !== '') {
+                \App\Services\Channels\RouteeSender::sms($cfg, $phone, $msg . ' (SMS)');
+                $parts[] = 'SMS';
+            }
+            if (trim((string) ($cfg['viber_sender_id'] ?? '')) !== '') {
+                $used = \App\Services\Channels\RouteeSender::viber($cfg, $phone, $msg . ' (Viber)');
+                $parts[] = $used === 'viber' ? 'Viber' : 'Viber→SMS';
+            }
+            if (!$parts) {
+                throw new \RuntimeException('Συμπλήρωσε αποστολέα SMS ή/και Viber sender.');
+            }
             return;
         }
         if (in_array($connector['type'], ['slack', 'teams', 'discord', 'webhook'], true)) {

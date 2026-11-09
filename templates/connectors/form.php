@@ -53,7 +53,12 @@ $user = Auth::user();
       <form method="post" action="<?= e(url('connectors/' . $conn['id'] . '/test')) ?>" class="card stack-sm" data-loading>
         <?= csrf_field() ?>
         <h2>Δοκιμαστικό μήνυμα</h2>
-        <?php if ($type === 'telegram' || in_array($type, ['smtp', 'm365'], true)): ?>
+        <?php if ($type === 'routee'): ?>
+          <label class="field">Κινητό για τη δοκιμή
+            <input class="input mono" name="target" value="<?= e(explode(',', (string) App\Services\Settings::get((int) Auth::tenantId(), 'notify.phones', ''))[0]) ?>" placeholder="69xxxxxxxx" inputmode="tel" required>
+            <span class="help">Στέλνει SMS και, αν έχει οριστεί Viber sender, και Viber. Χρεώνεται κανονικά.</span>
+          </label>
+        <?php elseif ($type === 'telegram' || in_array($type, ['smtp', 'm365'], true)): ?>
           <label class="field"><?= $type === 'telegram' ? 'Chat ID' : 'Email παραλήπτη' ?>
             <input class="input" name="target" value="<?= $type === 'telegram' ? e($cfg['default_chat_id'] ?? '') : e($user['email']) ?>" <?= $type === 'telegram' ? '' : 'type="email" required' ?>>
           </label>
@@ -96,6 +101,14 @@ $user = Auth::user();
           <li>Server Settings → <strong>Integrations → Webhooks → New Webhook</strong>.</li>
           <li>Διάλεξε κανάλι και πάτα <strong>Copy Webhook URL</strong>.</li>
         </ol>
+      <?php elseif ($type === 'routee'): ?>
+        <ol style="margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px">
+          <li>Στο <strong>platform.routee.net</strong> → <strong>Applications</strong>, άνοιξε (ή δημιούργησε) την εφαρμογή σου και αντέγραψε το <strong>Application ID</strong> και το <strong>Secret</strong>.</li>
+          <li><strong>SMS:</strong> βάλε τον εγκεκριμένο αποστολέα (έως 11 λατινικοί χαρακτήρες, π.χ. <code>SoftiCron</code>).</li>
+          <li><strong>Viber:</strong> αφού εγκριθεί ο Viber sender σου από τη Routee, αντέγραψε το <code>senderInfoTrackingId</code> από τη σελίδα Applications.</li>
+          <li>Όρισε τα κινητά παραληπτών στις <a href="<?= e(url('settings')) ?>">Ρυθμίσεις</a> ή σε κάθε job, και ένα ημερήσιο όριο για να προστατεύεις το υπόλοιπό σου.</li>
+        </ol>
+        <p class="xs muted">Με «Αποστολή SMS αντί για Viber», αν η Routee απορρίψει το Viber μήνυμα, στέλνεται αμέσως SMS. Αν ο παραλήπτης απλώς δεν έχει Viber, αυτό φαίνεται αργότερα στις αναφορές της Routee.</p>
       <?php elseif ($type === 'webhook'): ?>
         <p>Σε κάθε ειδοποίηση στέλνεται <code>POST</code> με JSON:</p>
         <pre class="code" style="font-size:11.5px">{
