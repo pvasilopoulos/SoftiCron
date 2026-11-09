@@ -162,7 +162,10 @@ final class AdminController extends Controller
             ['Scheduler (bin/cron.php)', $lastTick ? 'Τελευταία εκτέλεση ' . fmt_dt($lastTick, 'Europe/Athens', 'd/m H:i:s') : 'Δεν έχει τρέξει ποτέ', $lastTick && strtotime($lastTick . ' UTC') > time() - 180],
             ['APP_KEY', Env::get('APP_KEY') ? 'Ορισμένο' : 'Λείπει', (bool) Env::get('APP_KEY')],
             ['APP_URL', (string) Env::get('APP_URL', '—'), (bool) Env::get('APP_URL')],
-            ['Web Push (VAPID)', PushSender::configured() ? 'Ρυθμισμένο' : 'Λείπουν τα κλειδιά', PushSender::configured()],
+            (function (): array {
+                $err = PushSender::selfTest();
+                return ['Web Push (VAPID)', $err ?? 'Ρυθμισμένο, τα κλειδιά ταιριάζουν', $err === null];
+            })(),
             ['Platform mailer', EmailSender::platformConfigured() ? (string) Env::get('MAIL_HOST') : 'Δεν έχει ρυθμιστεί (προαιρετικό)', true],
             ['Εσωτερικές διευθύνσεις', Env::bool('ALLOW_PRIVATE_TARGETS') ? 'Επιτρέπονται (μόνο για dev!)' : 'Μπλοκάρονται', !Env::bool('ALLOW_PRIVATE_TARGETS')],
             ['Επεκτάσεις PHP', implode(', ', array_filter(['curl', 'sodium', 'pdo_mysql', 'mbstring', 'openssl', 'gmp'], fn ($e) => !extension_loaded($e))) ?: 'Όλες φορτωμένες', !array_filter(['curl', 'sodium', 'pdo_mysql', 'mbstring', 'openssl'], fn ($e) => !extension_loaded($e))],

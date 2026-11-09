@@ -16,6 +16,43 @@ final class PushSender
         return (string) Env::get('VAPID_PUBLIC_KEY', '') !== '' && (string) Env::get('VAPID_PRIVATE_KEY', '') !== '';
     }
 
+    /** Signs a test VAPID header; returns null when the key pair works, else a readable error. */
+    public static function selfTest(): ?string
+    {
+        if (!self::configured()) {
+            return 'Λείπουν τα VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY από το .env.';
+        }
+        try {
+            $vapid = \Minishlink\WebPush\VAPID::validate([
+                'subject' => trim((string) Env::get('VAPID_SUBJECT', 'mailto:admin@example.com')),
+                'publicKey' => trim((string) Env::get('VAPID_PUBLIC_KEY')),
+                'privateKey' => trim((string) Env::get('VAPID_PRIVATE_KEY')),
+            ]);
+            \Minishlink\WebPush\VAPID::getVapidHeaders('https://fcm.googleapis.com', $vapid['subject'], $vapid['publicKey'], $vapid['privateKey'], 'aes128gcm');
+            return null;
+        } catch (\Throwable $e) {
+            return self::explain($e);
+        }
+    }
+
+    private static function explain(\Throwable $e): string
+    {
+        $m = $e->getMessage();
+        $ssl = [];
+        while (($err = openssl_error_string()) !== false) {
+            $ssl[] = $err;
+        }
+        $sslInfo = $ssl ? ' [OpenSSL: ' . implode(' | ', array_slice($ssl, 0, 4)) . ']' : '';
+        if (str_contains($m, 'ECSignature') || str_contains($m, 'signature')) {
+            return 'Αποτυχία υπογραφής με το VAPID_PRIVATE_KEY (' . OPENSSL_VERSION_TEXT . ').' . $sslInfo
+                . ' Τρέξε: php bin/keygen.php --vapid --write και μετά Απενεργοποίηση/Ενεργοποίηση της συσκευής.';
+        }
+        if (str_contains($m, 'Invalid data') || str_contains($m, 'bytes long')) {
+            return 'Μη έγκυρη τιμή VAPID κλειδιού (κομμένο, με κενά ή σχόλιο στην ίδια γραμμή).';
+        }
+        return $m . $sslInfo;
+    }
+
     /**
      * Sends a notification to every device of the given users.
      * @param int[] $userIds
@@ -48,7 +85,7 @@ final class PushSender
         } catch (\Throwable $e) {
             App::log('push: invalid VAPID configuration: ' . $e->getMessage());
             $out['failed'] = count($subs);
-            $out['errors'][] = 'Λάθος ρύθμιση VAPID στο .env: ' . $e->getMessage();
+            $out['errors'][] = self::explain($e);
             return $out;
         }
         $json = (string) json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
@@ -72,7 +109,7 @@ final class PushSender
         } catch (\Throwable $e) {
             App::log('push: send failed: ' . $e->getMessage());
             $out['failed'] += count($byEndpoint);
-            $out['errors'][] = 'Αποτυχία αποστολής: ' . $e->getMessage();
+            $out['errors'][] = self::explain($e);
             return $out;
         }
         foreach ($reports as $report) {

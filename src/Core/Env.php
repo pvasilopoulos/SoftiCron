@@ -21,8 +21,13 @@ final class Env
             [$k, $v] = explode('=', $line, 2);
             $k = trim($k);
             $v = trim($v);
-            if (strlen($v) >= 2 && ($v[0] === '"' || $v[0] === "'") && $v[-1] === $v[0]) {
-                $v = substr($v, 1, -1);
+            if ($v !== '' && ($v[0] === '"' || $v[0] === "'")) {
+                // Quoted value: take what is inside the quotes (anything after is a comment).
+                $end = strpos($v, $v[0], 1);
+                $v = $end === false ? substr($v, 1) : substr($v, 1, $end - 1);
+            } else {
+                // Unquoted value: " # comment" at the end of the line is ignored.
+                $v = rtrim((string) preg_replace('/\s+#.*$/', '', $v));
             }
             self::$vars[$k] = $v;
         }
