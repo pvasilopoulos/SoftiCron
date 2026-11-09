@@ -103,7 +103,7 @@ final class StatusController extends Controller
         return $r;
     }
 
-    public function json(string $slug): Response
+    public function feed(string $slug): Response
     {
         $tenant = $this->tenantBySlug($slug);
         $d = $this->data($tenant);

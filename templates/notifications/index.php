@@ -45,7 +45,8 @@ $tz = Auth::tenant()['timezone'];
             <div class="stack-sm grow" style="gap:2px;min-width:160px">
               <label class="sr-only" for="dev-<?= (int) $d['id'] ?>">Όνομα συσκευής</label>
               <input id="dev-<?= (int) $d['id'] ?>" class="input" name="label" value="<?= e($d['label'] ?? '') ?>" placeholder="<?= e($d['user_agent'] ?: 'Συσκευή') ?>" maxlength="100" style="min-height:36px">
-              <span class="xs muted"><?= e($d['user_agent'] ?: 'Συσκευή') ?> · από <?= e(fmt_dt($d['created_at'], $tz, 'd/m/Y')) ?> · τελευταία αποστολή <?= e($d['last_success_at'] ? rel_time($d['last_success_at']) : 'ποτέ') ?><span class="this-device hidden"> · <strong>αυτή η συσκευή</strong></span></span>
+              <span class="this-device hidden badge ok" style="align-self:flex-start">Αυτή η συσκευή</span>
+              <?= App\Core\View::partial('partials/device_meta', ['d' => $d, 'tz' => $tz]) ?>
             </div>
             <label class="check xs" title="Λήψη ειδοποιήσεων"><span class="switch"><input type="checkbox" name="enabled" value="1" <?= $d['enabled'] ? 'checked' : '' ?>><span></span></span>Ενεργή</label>
             <button class="btn btn-sm" type="submit">Αποθήκευση</button>
@@ -97,7 +98,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   };
   let sub = await refresh();
   if (sub) {
-    try { await window.api('/notifications/subscribe', { method: 'POST', json: sub.toJSON() }); } catch (e) {}
+    try { await window.api('/notifications/subscribe', { method: 'POST', json: Object.assign(sub.toJSON(), { meta: window.deviceMeta() }) }); } catch (e) {}
     // Mark "this device" in the list.
     try {
       const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(sub.endpoint));
@@ -110,7 +111,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       const perm = await Notification.requestPermission();
       if (perm !== 'granted') { await refresh(); return; }
       sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64(card.dataset.vapid) });
-      await window.api('/notifications/subscribe', { method: 'POST', json: sub.toJSON() });
+      await window.api('/notifications/subscribe', { method: 'POST', json: Object.assign(sub.toJSON(), { meta: window.deviceMeta() }) });
       window.toast('Οι ειδοποιήσεις ενεργοποιήθηκαν σε αυτή τη συσκευή.');
       setTimeout(() => location.reload(), 800);
     } catch (e) { window.toast('Αποτυχία: ' + e.message, 'error'); }

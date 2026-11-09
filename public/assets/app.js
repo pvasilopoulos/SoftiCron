@@ -26,7 +26,35 @@
     return data;
   };
 
+  /** Details of this device, sent with the push subscription. */
+  window.deviceMeta = function () {
+    let tz = '';
+    try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (e) { /* old browser */ }
+    return {
+      pwa: window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true,
+      lang: navigator.language || '',
+      tz,
+      screen: Math.round(screen.width) + 'x' + Math.round(screen.height),
+    };
+  };
+
+  /** Keeps "last seen" / IP / PWA state of this device fresh (at most every 6 hours). */
+  async function deviceHeartbeat() {
+    try {
+      // Only inside the app (logged in), not on login/invite pages.
+      if (!document.getElementById('sidebar') || !('serviceWorker' in navigator)) return;
+      const key = 'deviceSeenAt';
+      if (Date.now() - (+localStorage.getItem(key) || 0) < 6 * 3600 * 1000) return;
+      const reg = await navigator.serviceWorker.getRegistration();
+      const sub = reg && await reg.pushManager.getSubscription();
+      if (!sub) return;
+      await window.api('/notifications/subscribe', { method: 'POST', json: Object.assign(sub.toJSON(), { meta: window.deviceMeta() }) });
+      localStorage.setItem(key, String(Date.now()));
+    } catch (e) { /* storage blocked or offline */ }
+  }
+
   document.addEventListener('DOMContentLoaded', () => {
+    deviceHeartbeat();
     // Mobile drawer
     document.querySelectorAll('[data-drawer-open]').forEach((b) => b.addEventListener('click', () => document.body.classList.add('drawer-open')));
     document.querySelectorAll('[data-drawer-close]').forEach((b) => b.addEventListener('click', () => document.body.classList.remove('drawer-open')));

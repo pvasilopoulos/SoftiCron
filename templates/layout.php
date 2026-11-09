@@ -20,6 +20,7 @@ $admin = [
     ['variables', 'variables', 'Μεταβλητές & secrets', 'lock', 'variables.view'],
     ['api', 'api-tokens', 'API', 'key', 'api.manage'],
     ['users', 'users', 'Χρήστες', 'users', 'users.view'],
+    ['devices', 'devices', 'Συσκευές χρηστών', 'bell', 'devices.view'],
     ['roles', 'roles', 'Ρόλοι', 'roles', 'roles.manage'],
     ['audit', 'audit', 'Audit log', 'audit', 'audit.view'],
     ['settings', 'settings', 'Ρυθμίσεις', 'settings', \App\Controllers\SettingsController::SETTINGS_PERMS],

@@ -138,11 +138,14 @@ final class PushSender
                     $out['sent_ids'][] = (int) $sub['id'];
                 }
                 if ($sub) {
-                    $db->update('push_subscriptions', ['last_success_at' => $db->now()], 'id = :id', ['id' => $sub['id']]);
+                    $db->update('push_subscriptions', ['last_success_at' => $db->now(), 'fail_count' => 0], 'id = :id', ['id' => $sub['id']]);
                 }
             } else {
                 $out['failed']++;
                 $out['errors'][] = $report->getReason();
+                if ($sub) {
+                    $db->exec('UPDATE push_subscriptions SET last_error = ?, last_error_at = UTC_TIMESTAMP(), fail_count = fail_count + 1 WHERE id = ?', [mb_substr((string) $report->getReason(), 0, 255), $sub['id']]);
+                }
                 if ($sub && $report->isSubscriptionExpired()) {
                     $db->exec('DELETE FROM push_subscriptions WHERE id = ?', [$sub['id']]);
                 }

@@ -7,6 +7,7 @@ $tz = Auth::tenant()['timezone'];
 <div class="page-head">
   <div><h1>Χρήστες</h1><p class="sub"><?= count($members) ?> μέλη στον <?= e(Auth::tenant()['name']) ?></p></div>
   <div class="row">
+    <?php if (Auth::can('devices.view')): ?><a class="btn" href="<?= e(url('devices')) ?>"><?= icon('bell', 16) ?>Συσκευές</a><?php endif; ?>
     <?php if (Auth::can('roles.manage')): ?><a class="btn" href="<?= e(url('roles')) ?>"><?= icon('roles', 16) ?>Ρόλοι & δικαιώματα</a><?php endif; ?>
     <?php if (\App\Auth\Auth::can('users.manage')): ?>
     <a class="btn btn-primary" href="<?= e(url('users/new')) ?>"><?= icon('plus', 16) ?>Νέος χρήστης</a>

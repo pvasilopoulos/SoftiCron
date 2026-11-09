@@ -63,6 +63,8 @@ final class Permissions
         'users.manage' => ['Χρήστες & ρόλοι', 'Διαχείριση χρηστών', 'Πρόσκληση, δημιουργία, επεξεργασία και αλλαγή ρόλου.'],
         'users.delete' => ['Χρήστες & ρόλοι', 'Αφαίρεση χρηστών', 'Αφαίρεση μέλους και ακύρωση προσκλήσεων.'],
         'roles.manage' => ['Χρήστες & ρόλοι', 'Διαχείριση ρόλων', 'Ρόλοι και πίνακας δικαιωμάτων.'],
+        'devices.view' => ['Χρήστες & ρόλοι', 'Προβολή συσκευών χρηστών', 'Οι συσκευές push όλων των μελών: πλατφόρμα, IP, τελευταία χρήση, σφάλματα.'],
+        'devices.manage' => ['Χρήστες & ρόλοι', 'Διαχείριση συσκευών χρηστών', 'Δοκιμή, απενεργοποίηση και αφαίρεση συσκευών άλλων μελών.'],
 
         // Security
         'audit.view' => ['Ασφάλεια', 'Προβολή audit log', 'Ποιος άλλαξε τι και πότε.'],
@@ -81,6 +83,7 @@ final class Permissions
         'templates.manage' => ['templates.view'], 'templates.test' => ['templates.view'],
         'variables.manage' => ['variables.view'],
         'users.manage' => ['users.view'], 'users.delete' => ['users.view'], 'roles.manage' => ['users.view'],
+        'devices.view' => ['users.view'], 'devices.manage' => ['devices.view'],
         'audit.export' => ['audit.view'],
     ];
 

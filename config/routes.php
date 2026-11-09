@@ -90,6 +90,10 @@ return static function (RouteCollector $r): void {
     $r->post('/users/{id:\d+}/role', [C\UserController::class, 'changeRole']);
     $r->post('/users/{id:\d+}/remove', [C\UserController::class, 'remove']);
     $r->post('/invitations/{id:\d+}/revoke', [C\UserController::class, 'revokeInvite']);
+    $r->get('/devices', [C\DeviceController::class, 'index']);
+    $r->post('/devices/{id:\d+}/toggle', [C\DeviceController::class, 'toggle']);
+    $r->post('/devices/{id:\d+}/test', [C\DeviceController::class, 'test']);
+    $r->post('/devices/{id:\d+}/delete', [C\DeviceController::class, 'delete']);
     $r->get('/roles', [C\RoleController::class, 'index']);
     $r->get('/roles/new', [C\RoleController::class, 'create']);
     $r->post('/roles', [C\RoleController::class, 'store']);
@@ -132,7 +136,7 @@ return static function (RouteCollector $r): void {
     $r->get('/admin/system', [C\AdminController::class, 'system']);
 
     // Public status page
-    $r->get('/status/{slug:[a-z0-9\-]+}.json', [C\StatusController::class, 'json']);
+    $r->get('/status/{slug:[a-z0-9\-]+}.json', [C\StatusController::class, 'feed']);
     $r->get('/status/{slug:[a-z0-9\-]+}', [C\StatusController::class, 'show']);
 
     // Heartbeat pings (public, GET or POST)

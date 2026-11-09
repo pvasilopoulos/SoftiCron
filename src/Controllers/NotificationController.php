@@ -16,7 +16,7 @@ final class NotificationController extends Controller
     {
         $tid = $this->tenantId();
         $uid = (int) Auth::id();
-        $devices = $this->db->all('SELECT id, user_agent, label, enabled, endpoint, created_at, last_success_at FROM push_subscriptions WHERE user_id = ? ORDER BY id DESC', [$uid]);
+        $devices = $this->db->all('SELECT * FROM push_subscriptions WHERE user_id = ? ORDER BY id DESC', [$uid]);
         $prefs = $this->db->value('SELECT events FROM user_notification_prefs WHERE user_id = ? AND tenant_id = ?', [$uid, $tid]);
         $events = $prefs !== null ? array_filter(explode(',', (string) $prefs)) : Notifier::DEFAULT_USER_EVENTS;
         return $this->view('notifications/index', [
@@ -111,11 +111,8 @@ final class NotificationController extends Controller
         if (!preg_match('#^https://#', $endpoint) || empty($keys['p256dh']) || empty($keys['auth'])) {
             return $this->json(['error' => 'Μη έγκυρη συνδρομή.'], 422);
         }
-        $this->db->exec(
-            'INSERT INTO push_subscriptions (user_id, endpoint, endpoint_hash, p256dh, auth, user_agent) VALUES (?, ?, ?, ?, ?, ?)
-             ON DUPLICATE KEY UPDATE user_id = VALUES(user_id), p256dh = VALUES(p256dh), auth = VALUES(auth), user_agent = VALUES(user_agent)',
-            [Auth::id(), $endpoint, hash('sha256', $endpoint), mb_substr((string) $keys['p256dh'], 0, 255), mb_substr((string) $keys['auth'], 0, 255), self::deviceName($this->req->userAgent())],
-        );
+        $ua = mb_substr((string) ($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 500);
+        \App\Services\Devices::register((int) Auth::id(), $endpoint, $keys, (array) $this->req->input('meta', []), $ua, $this->req->ip());
         return $this->json(['ok' => true]);
     }
 
@@ -202,25 +199,4 @@ final class NotificationController extends Controller
         return $this->redirect('notifications');
     }
 
-    private static function deviceName(string $ua): string
-    {
-        $os = match (true) {
-            str_contains($ua, 'iPhone') => 'iPhone',
-            str_contains($ua, 'iPad') => 'iPad',
-            str_contains($ua, 'Android') => 'Android',
-            str_contains($ua, 'Windows') => 'Windows',
-            str_contains($ua, 'Mac OS') => 'Mac',
-            str_contains($ua, 'Linux') => 'Linux',
-            default => 'Συσκευή',
-        };
-        $browser = match (true) {
-            str_contains($ua, 'Edg/') => 'Edge',
-            str_contains($ua, 'OPR/') => 'Opera',
-            str_contains($ua, 'Firefox') => 'Firefox',
-            str_contains($ua, 'Chrome') => 'Chrome',
-            str_contains($ua, 'Safari') => 'Safari',
-            default => 'Browser',
-        };
-        return "$os · $browser";
-    }
 }
