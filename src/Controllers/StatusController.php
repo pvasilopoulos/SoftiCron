@@ -7,115 +7,119 @@ namespace App\Controllers;
 use App\Core\HttpException;
 use App\Core\Response;
 use App\Core\View;
-use App\Services\Settings;
+use App\Services\StatusPage;
 
-/** Public status page per tenant: /status/{slug} (HTML) and /status/{slug}.json */
+/** Public status page per tenant: page, JSON, SVG badge, RSS and embeddable widget. */
 final class StatusController extends Controller
 {
-    private const DAYS = 90;
-
-    private function tenantBySlug(string $slug): array
+    private function load(string $slug): array
     {
-        $tid = $this->db->value("SELECT tenant_id FROM settings WHERE k = 'status.slug' AND v = ? LIMIT 1", [$slug]);
-        $tenant = $tid ? $this->db->one("SELECT * FROM tenants WHERE id = ? AND status = 'active'", [$tid]) : null;
-        if (!$tenant || Settings::get((int) $tenant['id'], 'status.enabled') !== '1') {
+        $tenant = StatusPage::tenantBySlug($slug);
+        if (!$tenant) {
             throw HttpException::notFound('Η σελίδα κατάστασης δεν βρέθηκε.');
         }
-        return $tenant;
+        return StatusPage::data($tenant);
     }
 
-    /** Builds the public data (never includes URLs, errors or internal details). */
-    private function data(array $tenant): array
+    private function cached(Response $r, int $seconds = 60): Response
     {
-        $tid = (int) $tenant['id'];
-        $tz = new \DateTimeZone($tenant['timezone'] ?: 'Europe/Athens');
-        $offset = $tz->getOffset(new \DateTimeImmutable('now', $tz));
-        $jobs = $this->db->all(
-            'SELECT id, COALESCE(status_name, name) AS name, group_name, enabled, last_status, failing_since, last_run_at
-             FROM jobs WHERE tenant_id = ? AND show_on_status = 1 ORDER BY group_name IS NULL, group_name, name',
-            [$tid],
-        );
-        $ids = array_column($jobs, 'id');
-        $daily = [];
-        if ($ids) {
-            $in = implode(',', array_map('intval', $ids));
-            $since = gmdate('Y-m-d H:i:s', time() - self::DAYS * 86400);
-            foreach ($this->db->all(
-                "SELECT job_id, DATE(COALESCE(started_at, scheduled_at) + INTERVAL $offset SECOND) AS d,
-                        SUM(status = 'success') AS ok, SUM(status = 'failed') AS failed
-                 FROM job_runs WHERE job_id IN ($in) AND status IN ('success','failed') AND COALESCE(started_at, scheduled_at) >= ?
-                 GROUP BY job_id, d",
-                [$since],
-            ) as $r) {
-                $daily[(int) $r['job_id']][$r['d']] = [(int) $r['ok'], (int) $r['failed']];
-            }
-        }
-        $today = new \DateTimeImmutable('now', $tz);
-        $groups = [];
-        $down = 0;
-        $degraded = 0;
-        foreach ($jobs as $j) {
-            $days = [];
-            $okSum = $failSum = 0;
-            for ($i = self::DAYS - 1; $i >= 0; $i--) {
-                $d = $today->modify("-$i days")->format('Y-m-d');
-                [$ok, $failed] = $daily[(int) $j['id']][$d] ?? [0, 0];
-                $okSum += $ok;
-                $failSum += $failed;
-                $ratio = $ok + $failed ? $ok / ($ok + $failed) : null;
-                $days[] = ['date' => $d, 'ratio' => $ratio, 'failed' => $failed];
-            }
-            $state = !$j['enabled'] ? 'paused' : ($j['last_status'] === 'failed' ? 'down' : ($j['last_status'] === null ? 'unknown' : 'up'));
-            if ($state === 'down') {
-                $down++;
-            }
-            if ($state === 'up' && ($days[self::DAYS - 1]['failed'] ?? 0) > 0) {
-                $state = 'degraded';
-                $degraded++;
-            }
-            $groups[$j['group_name'] ?? ''][] = [
-                'name' => $j['name'],
-                'state' => $state,
-                'since' => $j['failing_since'],
-                'uptime' => $okSum + $failSum ? 100 * $okSum / ($okSum + $failSum) : null,
-                'days' => $days,
-            ];
-        }
-        $total = count($jobs);
-        $overall = $total === 0 ? 'unknown' : ($down === 0 ? ($degraded ? 'degraded' : 'up') : ($down >= max(1, (int) ceil($total / 2)) ? 'major' : 'partial'));
-        // Incidents: currently failing components.
-        $incidents = [];
-        foreach ($jobs as $j) {
-            if ($j['enabled'] && $j['last_status'] === 'failed') {
-                $incidents[] = ['name' => $j['name'], 'since' => $j['failing_since'] ?? $j['last_run_at']];
-            }
-        }
-        return ['tenant' => $tenant, 'groups' => $groups, 'overall' => $overall, 'incidents' => $incidents, 'total' => $total,
-            'title' => Settings::get($tid, 'status.title') ?: $tenant['name'], 'description' => Settings::get($tid, 'status.description', ''), 'tz' => $tz->getName()];
+        $r->headers['Cache-Control'] = 'public, max-age=' . $seconds;
+        $r->headers['X-Content-Type-Options'] = 'nosniff';
+        return $r;
     }
 
     public function show(string $slug): Response
     {
-        $tenant = $this->tenantBySlug($slug);
-        $d = $this->data($tenant);
+        $d = $this->load($slug);
         $r = Response::html(View::render('status/page', $d + ['slug' => $slug], null));
-        $r->headers['Cache-Control'] = 'public, max-age=60';
-        return $r;
+        if ($d['options']['noindex'] === '1') {
+            $r->headers['X-Robots-Tag'] = 'noindex';
+        }
+        return $this->cached($r);
+    }
+
+    /** Compact version for an <iframe> on another site. */
+    public function embed(string $slug): Response
+    {
+        $d = $this->load($slug);
+        $r = Response::html(View::render('status/embed', $d + ['slug' => $slug], null));
+        $r->headers['Content-Security-Policy'] = 'frame-ancestors *';
+        return $this->cached($r);
     }
 
     public function feed(string $slug): Response
     {
-        $tenant = $this->tenantBySlug($slug);
-        $d = $this->data($tenant);
+        $d = $this->load($slug);
         $components = [];
         foreach ($d['groups'] as $g => $items) {
             foreach ($items as $c) {
-                $components[] = ['group' => $g ?: null, 'name' => $c['name'], 'status' => $c['state'], 'uptime_90d' => $c['uptime'] !== null ? round($c['uptime'], 3) : null];
+                $u7 = StatusPage::uptime($c['days'], 7);
+                $u30 = StatusPage::uptime($c['days'], 30);
+                $u90 = StatusPage::uptime($c['days'], 90);
+                $components[] = [
+                    'group' => $g ?: null, 'name' => $c['name'], 'status' => $c['state'],
+                    'uptime_7d' => $u7 !== null ? round($u7, 3) : null,
+                    'uptime_30d' => $u30 !== null ? round($u30, 3) : null,
+                    'uptime_90d' => $u90 !== null ? round($u90, 3) : null,
+                    'response_ms_24h' => $d['options']['show_response'] === '1' ? $c['response_ms'] : null,
+                ];
             }
         }
-        $r = Response::json(['title' => $d['title'], 'status' => $d['overall'], 'components' => $components, 'updated_at' => gmdate(DATE_ATOM)]);
-        $r->headers['Cache-Control'] = 'public, max-age=60';
+        $iso = fn (?string $utc) => $utc ? gmdate('Y-m-d\TH:i:s\Z', strtotime($utc . ' UTC')) : null;
+        $notices = [];
+        foreach (['active', 'upcoming'] as $b) {
+            foreach ($d['notices'][$b] as $n) {
+                $notices[] = ['type' => $n['kind'], 'title' => $n['title'], 'body' => $n['body'], 'starts_at' => $iso($n['starts_at']), 'ends_at' => $iso($n['ends_at']), 'state' => $b];
+            }
+        }
+        $incidents = array_map(fn ($i) => [
+            'component' => $i['name'], 'started_at' => $iso($i['start']), 'resolved_at' => $iso($i['end']), 'duration_min' => $i['minutes'],
+        ], array_slice($d['history'], 0, 20));
+        $r = Response::json([
+            'title' => $d['title'], 'status' => $d['overall'], 'components' => $components,
+            'notices' => $notices, 'incidents' => $incidents, 'updated_at' => gmdate(DATE_ATOM),
+        ]);
         $r->headers['Access-Control-Allow-Origin'] = '*';
-        return $r;
+        return $this->cached($r);
+    }
+
+    public function badge(string $slug): Response
+    {
+        $tenant = StatusPage::tenantBySlug($slug);
+        $overall = $tenant ? StatusPage::data($tenant)['overall'] : 'unknown';
+        $label = mb_substr((string) ($this->req->query('label', '') ?: 'status'), 0, 30);
+        $r = new Response(StatusPage::badge($label, $overall), 200, ['Content-Type' => 'image/svg+xml; charset=utf-8']);
+        $r->headers['Access-Control-Allow-Origin'] = '*';
+        return $this->cached($r, 120);
+    }
+
+    /** RSS 2.0 with announcements and incidents. */
+    public function rss(string $slug): Response
+    {
+        $d = $this->load($slug);
+        $x = fn (string $s) => htmlspecialchars($s, ENT_XML1 | ENT_QUOTES, 'UTF-8');
+        $link = abs_url('status/' . $slug);
+        $items = [];
+        foreach (array_merge($d['notices']['active'], $d['notices']['upcoming'], $d['notices']['past']) as $n) {
+            $items[] = [strtotime($n['starts_at'] . ' UTC'), (StatusPage::NOTICE_KINDS[$n['kind']][0] ?? '') . ': ' . $n['title'], (string) $n['body'], 'notice-' . $n['id']];
+        }
+        foreach ($d['history'] as $i) {
+            $items[] = [
+                strtotime($i['start'] . ' UTC'),
+                ($i['ongoing'] ? 'Διακοπή σε εξέλιξη: ' : 'Διακοπή: ') . $i['name'],
+                $i['ongoing'] ? 'Η υπηρεσία είναι εκτός λειτουργίας. Η ομάδα έχει ενημερωθεί.' : 'Διάρκεια ' . $i['minutes'] . ' λεπτά. Επιλύθηκε.',
+                'incident-' . md5($i['name'] . $i['start']),
+            ];
+        }
+        usort($items, fn ($a, $b) => $b[0] <=> $a[0]);
+        $xml = '<?xml version="1.0" encoding="UTF-8"?>' . "\n" . '<rss version="2.0"><channel>'
+            . '<title>' . $x($d['title'] . ' · Κατάσταση υπηρεσιών') . '</title><link>' . $x($link) . '</link>'
+            . '<description>' . $x($d['description'] ?: 'Ανακοινώσεις και συμβάντα') . '</description><language>el</language>';
+        foreach (array_slice($items, 0, 50) as [$ts, $title, $body, $guid]) {
+            $xml .= '<item><title>' . $x($title) . '</title><link>' . $x($link) . '</link><guid isPermaLink="false">' . $x($guid) . '</guid>'
+                . '<pubDate>' . gmdate(DATE_RSS, $ts) . '</pubDate><description>' . $x($body) . '</description></item>';
+        }
+        $xml .= '</channel></rss>';
+        return $this->cached(new Response($xml, 200, ['Content-Type' => 'application/rss+xml; charset=utf-8']), 300);
     }
 }

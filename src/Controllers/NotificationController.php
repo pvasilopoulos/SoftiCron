@@ -162,7 +162,11 @@ final class NotificationController extends Controller
             'badge' => abs_url('assets/icons/badge-72.png'),
         ], true);
         $ok = $res['sent'] > 0;
-        $this->flash($ok ? 'success' : 'error', $ok ? 'Στάλθηκε.' : 'Αποτυχία: ' . (implode('; ', array_slice($res['errors'], 0, 2)) ?: 'άγνωστο σφάλμα'));
+        $msg = $ok ? 'Στάλθηκε δοκιμαστική ειδοποίηση στη συσκευή «' . ($d['label'] ?: $d['user_agent'] ?: 'χωρίς όνομα') . '».' : 'Αποτυχία: ' . (implode('; ', array_slice($res['errors'], 0, 2)) ?: 'άγνωστο σφάλμα');
+        if ($this->req->wantsJson()) {
+            return $this->json(['ok' => $ok, 'message' => $msg], $ok ? 200 : 422);
+        }
+        $this->flash($ok ? 'success' : 'error', $msg);
         return $this->redirect('notifications');
     }
 
@@ -170,7 +174,33 @@ final class NotificationController extends Controller
     {
         $this->user();
         $this->db->exec('DELETE FROM push_subscriptions WHERE id = ? AND user_id = ?', [$id, Auth::id()]);
+        if ($this->req->wantsJson()) {
+            return $this->json(['ok' => true]);
+        }
         $this->flash('success', 'Η συσκευή αφαιρέθηκε.');
+        return $this->redirect('notifications');
+    }
+
+    /** Removes my disabled, failing or long-unused devices in one go. */
+    public function cleanupDevices(): Response
+    {
+        $this->user();
+        $what = (string) $this->req->input('what', '');
+        $cond = match ($what) {
+            'disabled' => 'enabled = 0',
+            'failing' => 'fail_count > 0',
+            'stale' => "COALESCE(last_seen_at, created_at) < UTC_TIMESTAMP() - INTERVAL 30 DAY",
+            default => null,
+        };
+        if ($cond === null) {
+            throw new \App\Core\HttpException(422, 'Άγνωστη επιλογή.');
+        }
+        $n = $this->db->exec("DELETE FROM push_subscriptions WHERE user_id = ? AND $cond", [Auth::id()]);
+        $msg = $n ? 'Αφαιρέθηκαν ' . $n . ($n === 1 ? ' συσκευή.' : ' συσκευές.') : 'Δεν βρέθηκαν συσκευές για αφαίρεση.';
+        if ($this->req->wantsJson()) {
+            return $this->json(['ok' => true, 'deleted' => $n, 'message' => $msg]);
+        }
+        $this->flash('success', $msg);
         return $this->redirect('notifications');
     }
 

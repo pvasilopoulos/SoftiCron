@@ -67,6 +67,7 @@ return static function (RouteCollector $r): void {
     $r->post('/notifications/prefs', [C\NotificationController::class, 'savePrefs']);
     $r->post('/notifications/subscribe', [C\NotificationController::class, 'subscribe']);
     $r->post('/notifications/unsubscribe', [C\NotificationController::class, 'unsubscribe']);
+    $r->post('/notifications/devices/cleanup', [C\NotificationController::class, 'cleanupDevices']);
     $r->post('/notifications/devices/{id:\d+}/delete', [C\NotificationController::class, 'deleteDevice']);
     $r->post('/notifications/devices/{id:\d+}', [C\NotificationController::class, 'updateDevice']);
     $r->post('/notifications/devices/{id:\d+}/test', [C\NotificationController::class, 'testDevice']);
@@ -137,7 +138,19 @@ return static function (RouteCollector $r): void {
 
     // Public status page
     $r->get('/status/{slug:[a-z0-9\-]+}.json', [C\StatusController::class, 'feed']);
+    $r->get('/status/{slug:[a-z0-9\-]+}.svg', [C\StatusController::class, 'badge']);
+    $r->get('/status/{slug:[a-z0-9\-]+}.rss', [C\StatusController::class, 'rss']);
+    $r->get('/status/{slug:[a-z0-9\-]+}/embed', [C\StatusController::class, 'embed']);
     $r->get('/status/{slug:[a-z0-9\-]+}', [C\StatusController::class, 'show']);
+
+    // Status page administration
+    $r->get('/status-page', [C\StatusAdminController::class, 'index']);
+    $r->post('/status-page/settings', [C\StatusAdminController::class, 'settings']);
+    $r->post('/status-page/components', [C\StatusAdminController::class, 'components']);
+    $r->post('/status-page/notices', [C\StatusAdminController::class, 'storeNotice']);
+    $r->post('/status-page/notices/{id:\d+}', [C\StatusAdminController::class, 'updateNotice']);
+    $r->post('/status-page/notices/{id:\d+}/resolve', [C\StatusAdminController::class, 'resolveNotice']);
+    $r->post('/status-page/notices/{id:\d+}/delete', [C\StatusAdminController::class, 'deleteNotice']);
 
     // Heartbeat pings (public, GET or POST)
     $r->addRoute(['GET', 'POST'], '/ping/{token:[a-f0-9]{32}}', [C\PingController::class, 'success']);

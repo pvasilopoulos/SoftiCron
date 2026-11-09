@@ -103,25 +103,14 @@ $cMenu = Auth::can('settings.menu');
 <?php if ($cStatus):
 $stSlug = $settings['status.slug'] ?? $tenant['slug'];
 $stOn = ($settings['status.enabled'] ?? '') === '1';
-$stCount = (int) App\Core\App::db()->value('SELECT COUNT(*) FROM jobs WHERE tenant_id = ? AND show_on_status = 1', [$tenant['id']]);
 ?>
-<form id="status-page" method="post" action="<?= e(url('settings/status')) ?>" class="card stack">
-  <?= csrf_field() ?>
-  <div class="row between">
-    <div><h2>Δημόσια σελίδα κατάστασης</h2><p class="small muted" style="margin-top:4px">Μια σελίδα για τους πελάτες σου με την κατάσταση των υπηρεσιών και το uptime 90 ημερών, χωρίς τεχνικές λεπτομέρειες.</p></div>
-    <?php if ($stOn): ?><a class="btn" href="<?= e(url('status/' . $stSlug)) ?>" target="_blank" rel="noopener"><?= icon('send', 16) ?>Άνοιγμα σελίδας</a><?php endif; ?>
+<section id="status-page" class="card row between" style="gap:12px;flex-wrap:wrap">
+  <div class="stack-sm" style="gap:2px">
+    <h2>Δημόσια σελίδα κατάστασης <span class="badge <?= $stOn ? 'ok' : 'off' ?>" style="vertical-align:middle"><?= $stOn ? 'Δημοσιευμένη' : 'Ανενεργή' ?></span></h2>
+    <span class="small muted">Υπηρεσίες, ανακοινώσεις, εμφάνιση, badge, widget και RSS · <span class="mono"><?= e(abs_url('status/' . $stSlug)) ?></span></span>
   </div>
-  <label class="check"><input type="checkbox" name="enabled" value="1" <?= $stOn ? 'checked' : '' ?>>Ενεργή</label>
-  <div class="form-grid">
-    <label class="field">Διεύθυνση
-      <div class="row" style="gap:4px;flex-wrap:nowrap"><span class="small muted nowrap"><?= e(abs_url('status/')) ?></span><input class="input mono" name="slug" value="<?= e($stSlug) ?>" pattern="[a-z0-9\-]+" maxlength="60"></div>
-    </label>
-    <label class="field">Τίτλος<input class="input" name="title" value="<?= e($settings['status.title'] ?? '') ?>" placeholder="<?= e($tenant['name']) ?>" maxlength="120"></label>
-  </div>
-  <label class="field">Περιγραφή <span class="help">Προαιρετική</span><input class="input" name="description" value="<?= e($settings['status.description'] ?? '') ?>" maxlength="255" placeholder="π.χ. Κατάσταση των online υπηρεσιών της Acme"></label>
-  <p class="xs muted"><?= $stCount ?> jobs εμφανίζονται στη σελίδα. Επίλεξε ποια από τη φόρμα κάθε job → «SLA & σελίδα κατάστασης».</p>
-  <div class="form-actions"><button class="btn btn-primary" type="submit">Αποθήκευση</button></div>
-</form>
+  <a class="btn btn-primary" href="<?= e(url('status-page')) ?>">Διαχείριση σελίδας κατάστασης</a>
+</section>
 <?php endif; ?>
 
 <?php if ($cMenu):

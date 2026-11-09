@@ -102,6 +102,45 @@
       navigator.clipboard?.writeText(b.dataset.copy).then(() => window.toast('Αντιγράφηκε.'));
     }));
 
+    // "Αντιγραφή" button on every code block, including ones added later (test run results etc.).
+    const copyText = async (text) => {
+      try { await navigator.clipboard.writeText(text); return true; } catch (e) {
+        // Fallback for non-secure contexts.
+        const ta = Object.assign(document.createElement('textarea'), { value: text });
+        ta.style.cssText = 'position:fixed;opacity:0';
+        document.body.appendChild(ta); ta.select();
+        const ok = document.execCommand('copy'); ta.remove(); return ok;
+      }
+    };
+    const enhanceCode = (root) => {
+      (root.querySelectorAll ? root : document).querySelectorAll('pre.code:not([data-no-copy])').forEach((pre) => {
+        if (pre.parentElement.classList.contains('code-wrap')) return;
+        const wrap = document.createElement('div');
+        wrap.className = 'code-wrap';
+        wrap.style.marginTop = pre.style.marginTop;
+        pre.style.marginTop = '0';
+        pre.parentNode.insertBefore(wrap, pre);
+        wrap.appendChild(pre);
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'code-copy';
+        btn.setAttribute('aria-label', 'Αντιγραφή κώδικα');
+        btn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span>Αντιγραφή</span>';
+        btn.addEventListener('click', async () => {
+          const ok = await copyText(pre.innerText.replace(/\s+$/, ''));
+          btn.classList.toggle('done', ok);
+          btn.querySelector('span').textContent = ok ? 'Αντιγράφηκε' : 'Αποτυχία';
+          clearTimeout(btn._t);
+          btn._t = setTimeout(() => { btn.classList.remove('done'); btn.querySelector('span').textContent = 'Αντιγραφή'; }, 1600);
+        });
+        wrap.appendChild(btn);
+      });
+    };
+    enhanceCode(document);
+    new MutationObserver((muts) => muts.forEach((m) => m.addedNodes.forEach((n) => {
+      if (n.nodeType === 1 && (n.matches?.('pre.code') || n.querySelector?.('pre.code'))) enhanceCode(n.matches('pre.code') ? n.parentNode : n);
+    }))).observe(document.body, { childList: true, subtree: true });
+
     // Ctrl/Cmd+K focuses search
     document.addEventListener('keydown', (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {

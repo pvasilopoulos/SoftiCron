@@ -34,28 +34,115 @@ $tz = Auth::tenant()['timezone'];
       </div>
     </section>
 
-    <section class="card">
-      <h2 style="margin-bottom:8px">Οι συσκευές μου</h2>
-      <?php if (!$devices): ?><p class="small muted">Δεν έχεις ενεργοποιήσει ειδοποιήσεις σε καμία συσκευή.</p><?php endif; ?>
-      <?php foreach ($devices as $d): ?>
-        <div class="list-item" style="flex-wrap:wrap" data-device-endpoint="<?= e(hash('sha256', $d['endpoint'])) ?>">
-          <span class="avatar"><?= icon(str_contains((string) $d['user_agent'], 'iPhone') || str_contains((string) $d['user_agent'], 'Android') ? 'bell' : 'dashboard', 16) ?></span>
-          <form method="post" action="<?= e(url('notifications/devices/' . $d['id'])) ?>" class="grow row" style="gap:8px;min-width:220px">
-            <?= csrf_field() ?>
-            <div class="stack-sm grow" style="gap:2px;min-width:160px">
-              <label class="sr-only" for="dev-<?= (int) $d['id'] ?>">Όνομα συσκευής</label>
-              <input id="dev-<?= (int) $d['id'] ?>" class="input" name="label" value="<?= e($d['label'] ?? '') ?>" placeholder="<?= e($d['user_agent'] ?: 'Συσκευή') ?>" maxlength="100" style="min-height:36px">
-              <span class="this-device hidden badge ok" style="align-self:flex-start">Αυτή η συσκευή</span>
-              <?= App\Core\View::partial('partials/device_meta', ['d' => $d, 'tz' => $tz]) ?>
-            </div>
-            <label class="check xs" title="Λήψη ειδοποιήσεων"><span class="switch"><input type="checkbox" name="enabled" value="1" <?= $d['enabled'] ? 'checked' : '' ?>><span></span></span>Ενεργή</label>
-            <button class="btn btn-sm" type="submit">Αποθήκευση</button>
-          </form>
-          <form method="post" action="<?= e(url('notifications/devices/' . $d['id'] . '/test')) ?>" class="inline"><?= csrf_field() ?><button class="btn btn-ghost btn-sm" type="submit" title="Δοκιμή σε αυτή τη συσκευή"><?= icon('send', 14) ?>Δοκιμή</button></form>
-          <form method="post" action="<?= e(url('notifications/devices/' . $d['id'] . '/delete')) ?>" data-confirm="Να αφαιρεθεί η συσκευή;"><?= csrf_field() ?><button class="btn btn-ghost btn-icon btn-sm" type="submit" aria-label="Αφαίρεση συσκευής"><?= icon('trash', 16) ?></button></form>
+    <?php
+    $staleCut = time() - 30 * 86400;
+    $devState = function (array $d) use ($staleCut): string {
+        if (!$d['enabled']) {
+            return 'disabled';
+        }
+        if ((int) ($d['fail_count'] ?? 0) > 0) {
+            return 'failing';
+        }
+        return strtotime(($d['last_seen_at'] ?: $d['created_at']) . ' UTC') < $staleCut ? 'stale' : 'active';
+    };
+    $stateMeta = ['active' => ['ok', 'Ενεργή'], 'failing' => ['fail', 'Σφάλματα'], 'stale' => ['slow', 'Αδρανής'], 'disabled' => ['off', 'Ανενεργή']];
+    $devCounts = ['all' => count($devices), 'active' => 0, 'failing' => 0, 'stale' => 0, 'disabled' => 0];
+    foreach ($devices as $d) {
+        $devCounts[$devState($d)]++;
+    }
+    $isMobile = fn (array $d) => (bool) preg_match('/iPhone|iPad|Android/', ($d['platform'] ?? '') . ' ' . ($d['user_agent'] ?? ''));
+    ?>
+    <section class="card stack" id="my-devices">
+      <div class="row between" style="align-items:flex-start">
+        <div>
+          <h2>Οι συσκευές μου</h2>
+          <p class="small muted" style="margin-top:4px">
+            <?php if ($devices): ?><?= $devCounts['active'] ?> από <?= count($devices) ?> λαμβάνουν κανονικά ειδοποιήσεις<?php if ($devCounts['failing']): ?> · <span style="color:var(--fail-fg)"><?= $devCounts['failing'] ?> με σφάλματα</span><?php endif; ?>
+            <?php else: ?>Οι συσκευές όπου έχεις ενεργοποιήσει τις ειδοποιήσεις push<?php endif; ?>
+          </p>
         </div>
-      <?php endforeach; ?>
-      <p class="xs muted" style="margin-top:8px">Δώσε όνομα σε κάθε συσκευή (π.χ. «Κινητό», «Laptop γραφείου»), για να την αναγνωρίζουν οι διαχειριστές όταν επιλέγουν παραλήπτες σε ένα job. Μια ανενεργή συσκευή δεν λαμβάνει καμία ειδοποίηση.</p>
+        <?php if ($devices): ?>
+          <div class="row" style="gap:6px">
+            <button class="btn btn-sm" type="button" data-dev-test-all <?= $devCounts['all'] - $devCounts['disabled'] ? '' : 'disabled' ?>><?= icon('send', 14) ?>Δοκιμή σε όλες</button>
+            <details class="feed-more">
+              <summary class="btn btn-sm btn-icon" aria-label="Καθαρισμός συσκευών" title="Καθαρισμός">⋯</summary>
+              <div class="feed-menu">
+                <button type="button" data-dev-cleanup="disabled"<?= $devCounts['disabled'] ? '' : ' disabled' ?>><?= icon('trash', 14) ?>Αφαίρεση ανενεργών (<?= $devCounts['disabled'] ?>)</button>
+                <button type="button" data-dev-cleanup="failing"<?= $devCounts['failing'] ? '' : ' disabled' ?>><?= icon('trash', 14) ?>Αφαίρεση με σφάλματα (<?= $devCounts['failing'] ?>)</button>
+                <button type="button" data-dev-cleanup="stale"<?= $devCounts['stale'] ? '' : ' disabled' ?>><?= icon('trash', 14) ?>Αφαίρεση αδρανών 30+ ημερών (<?= $devCounts['stale'] ?>)</button>
+              </div>
+            </details>
+          </div>
+        <?php endif; ?>
+      </div>
+
+      <?php if (!$devices): ?>
+        <div class="dev-empty">
+          <div class="dev-empty-ic"><?= icon('bell', 28) ?></div>
+          <div class="stack-sm" style="gap:4px;text-align:center;max-width:440px">
+            <strong>Δεν έχεις ενεργοποιήσει ειδοποιήσεις σε καμία συσκευή</strong>
+            <span class="small muted">Ενεργοποίησέ τες εδώ ή στο κινητό σου, για να μαθαίνεις αμέσως όταν ένα job αποτυγχάνει, ακόμα και με την εφαρμογή κλειστή.</span>
+          </div>
+          <button class="btn btn-primary" type="button" data-dev-enable-here <?= $pushConfigured ? '' : 'disabled' ?>><?= icon('bell', 16) ?>Ενεργοποίηση σε αυτή τη συσκευή</button>
+          <div class="dev-steps">
+            <div><span class="dev-step-n">1</span><span><strong>Android ή υπολογιστής:</strong> άνοιξε αυτή τη σελίδα στη συσκευή και πάτα «Ενεργοποίηση».</span></div>
+            <div><span class="dev-step-n">2</span><span><strong>iPhone ή iPad:</strong> στο Safari πάτα Κοινοποίηση → «Προσθήκη στην αρχική οθόνη», άνοιξε την εφαρμογή από το εικονίδιο και ενεργοποίησε από εδώ.</span></div>
+            <div><span class="dev-step-n">3</span><span class="grow stack-sm" style="gap:4px"><strong>Σύνδεσμος για το κινητό:</strong>
+              <span class="row" style="gap:6px;flex-wrap:nowrap"><input class="input mono" value="<?= e(abs_url('notifications')) ?>" readonly onclick="this.select()" aria-label="Σύνδεσμος για το κινητό" style="min-height:32px;font-size:12px"><button class="btn btn-sm" type="button" data-copy="<?= e(abs_url('notifications')) ?>"><?= icon('copy', 14) ?>Αντιγραφή</button></span></span></div>
+          </div>
+        </div>
+      <?php else: ?>
+        <div class="dev-toolbar">
+          <div class="feed-tabs" role="tablist" aria-label="Φίλτρο συσκευών" style="padding:0">
+            <?php foreach (['all' => 'Όλες', 'active' => 'Ενεργές', 'failing' => 'Με σφάλματα', 'stale' => 'Αδρανείς', 'disabled' => 'Ανενεργές'] as $k => $l): if ($k !== 'all' && !$devCounts[$k]) { continue; } ?>
+              <button type="button" role="tab" aria-selected="<?= $k === 'all' ? 'true' : 'false' ?>" data-dev-filter="<?= $k ?>"><?= e($l) ?> <span class="dev-n"><?= $devCounts[$k] ?></span></button>
+            <?php endforeach; ?>
+          </div>
+          <div class="row" style="gap:6px;flex-wrap:nowrap">
+            <?php if (count($devices) > 3): ?><div class="feed-search" style="margin:0;flex:1"><?= icon('search', 14) ?><input type="search" data-dev-q placeholder="Αναζήτηση…" aria-label="Αναζήτηση συσκευών"></div><?php endif; ?>
+            <label class="sr-only" for="dev-sort">Ταξινόμηση</label>
+            <select id="dev-sort" class="select" data-dev-sort style="width:auto;min-height:34px;font-size:13px">
+              <option value="seen">Τελευταία χρήση</option>
+              <option value="name">Όνομα</option>
+              <option value="created">Ημερομηνία εγγραφής</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="dev-grid" data-dev-grid>
+          <?php foreach ($devices as $d): $st = $devState($d); [$cls, $lbl] = $stateMeta[$st]; ?>
+            <article class="dev-card st-<?= $st ?>" data-dev-id="<?= (int) $d['id'] ?>" data-state="<?= $st ?>"
+              data-device-endpoint="<?= e(hash('sha256', $d['endpoint'])) ?>"
+              data-name="<?= e(mb_strtolower(($d['label'] ?? '') . ' ' . $d['user_agent'] . ' ' . ($d['platform'] ?? '') . ' ' . ($d['browser'] ?? ''))) ?>"
+              data-seen="<?= strtotime(($d['last_seen_at'] ?: $d['created_at']) . ' UTC') ?>" data-created="<?= strtotime($d['created_at'] . ' UTC') ?>">
+              <div class="dev-head">
+                <span class="dev-ic" aria-hidden="true">
+                  <?php if ($isMobile($d)): ?><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M11 18h2"/></svg>
+                  <?php else: ?><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg><?php endif; ?>
+                </span>
+                <div class="grow" style="min-width:0">
+                  <label class="sr-only" for="dev-<?= (int) $d['id'] ?>">Όνομα συσκευής</label>
+                  <input id="dev-<?= (int) $d['id'] ?>" class="dev-name" data-dev-label value="<?= e($d['label'] ?? '') ?>" placeholder="<?= e($d['user_agent'] ?: 'Συσκευή') ?> · δώσε όνομα" maxlength="100" title="Κλικ για μετονομασία">
+                  <div class="row" style="gap:6px;margin-top:2px">
+                    <span class="badge <?= $cls ?>" data-dev-badge><?= e($lbl) ?></span>
+                    <span class="badge run this-device hidden">Αυτή η συσκευή</span>
+                    <span class="xs" data-dev-saved hidden style="color:var(--ok-fg)">✓ αποθηκεύτηκε</span>
+                  </div>
+                </div>
+                <label class="switch" title="Λήψη ειδοποιήσεων σε αυτή τη συσκευή"><input type="checkbox" data-dev-enabled <?= $d['enabled'] ? 'checked' : '' ?> aria-label="Λήψη ειδοποιήσεων"><span></span></label>
+              </div>
+              <div class="stack-sm" style="gap:6px"><?= App\Core\View::partial('partials/device_meta', ['d' => $d, 'tz' => $tz]) ?></div>
+              <div class="dev-actions">
+                <button class="btn btn-sm" type="button" data-dev-test <?= $d['enabled'] ? '' : 'disabled' ?>><?= icon('send', 14) ?>Δοκιμή</button>
+                <span class="grow"></span>
+                <button class="btn btn-sm btn-ghost" type="button" data-dev-delete style="color:var(--fail-fg)"><?= icon('trash', 14) ?>Αφαίρεση</button>
+              </div>
+            </article>
+          <?php endforeach; ?>
+        </div>
+        <p class="small muted hidden" data-dev-none style="text-align:center;padding:12px">Καμία συσκευή με αυτό το φίλτρο.</p>
+        <p class="xs muted">Δώσε όνομα σε κάθε συσκευή (π.χ. «Κινητό», «Laptop γραφείου») για να την αναγνωρίζουν οι διαχειριστές όταν επιλέγουν παραλήπτες σε ένα job. Οι αλλαγές αποθηκεύονται αυτόματα.</p>
+      <?php endif; ?>
     </section>
   </div>
 
@@ -122,5 +209,106 @@ document.addEventListener('DOMContentLoaded', async () => {
     window.toast('Οι ειδοποιήσεις απενεργοποιήθηκαν.');
     setTimeout(() => location.reload(), 800);
   });
+});
+</script>
+<script>
+/* "Οι συσκευές μου": filters, sorting, autosave, test, remove, cleanup. */
+document.addEventListener('DOMContentLoaded', () => {
+  const box = document.getElementById('my-devices');
+  if (!box) return;
+  const enableHere = box.querySelector('[data-dev-enable-here]');
+  if (enableHere) enableHere.addEventListener('click', () => document.querySelector('[data-push-enable]')?.click());
+  const grid = box.querySelector('[data-dev-grid]');
+  if (!grid) return;
+  const cards = () => [...grid.querySelectorAll('.dev-card')];
+  const q = box.querySelector('[data-dev-q]');
+  const sort = box.querySelector('[data-dev-sort]');
+  let filter = 'all';
+  const apply = () => {
+    const term = (q?.value || '').trim().toLowerCase();
+    let shown = 0;
+    cards().forEach((c) => {
+      const ok = (filter === 'all' || c.dataset.state === filter) && (!term || c.dataset.name.includes(term));
+      c.hidden = !ok;
+      shown += ok ? 1 : 0;
+    });
+    box.querySelector('[data-dev-none]').classList.toggle('hidden', shown > 0);
+    const key = sort.value;
+    cards().sort((a, b) => key === 'name'
+      ? (a.querySelector('[data-dev-label]').value || a.dataset.name).localeCompare(b.querySelector('[data-dev-label]').value || b.dataset.name, 'el')
+      : (+b.dataset[key === 'created' ? 'created' : 'seen']) - (+a.dataset[key === 'created' ? 'created' : 'seen'])).forEach((c) => grid.appendChild(c));
+    try { localStorage.setItem('devSort', key); } catch (e) { /* ignore */ }
+  };
+  try { const s = localStorage.getItem('devSort'); if (s) sort.value = s; } catch (e) { /* ignore */ }
+  box.querySelectorAll('[data-dev-filter]').forEach((b) => b.addEventListener('click', () => {
+    filter = b.dataset.devFilter;
+    box.querySelectorAll('[data-dev-filter]').forEach((o) => o.setAttribute('aria-selected', o === b ? 'true' : 'false'));
+    apply();
+  }));
+  q?.addEventListener('input', apply);
+  sort.addEventListener('change', apply);
+  apply();
+
+  // Autosave name and on/off switch.
+  const save = async (card) => {
+    const label = card.querySelector('[data-dev-label]');
+    const on = card.querySelector('[data-dev-enabled]').checked;
+    const fd = new FormData();
+    fd.append('label', label.value.trim());
+    if (on) fd.append('enabled', '1');
+    try {
+      await window.api('/notifications/devices/' + card.dataset.devId, { method: 'POST', body: fd });
+      const s = card.querySelector('[data-dev-saved]');
+      s.hidden = false; clearTimeout(s._t); s._t = setTimeout(() => { s.hidden = true; }, 1800);
+      const badge = card.querySelector('[data-dev-badge]');
+      if (!on) { card.dataset.state = 'disabled'; badge.className = 'badge off'; badge.textContent = 'Ανενεργή'; }
+      else if (card.dataset.state === 'disabled') { card.dataset.state = 'active'; badge.className = 'badge ok'; badge.textContent = 'Ενεργή'; }
+      card.className = 'dev-card st-' + card.dataset.state;
+      card.querySelector('[data-dev-test]').disabled = !on;
+      card.dataset.name = (label.value + ' ' + card.dataset.name).toLowerCase();
+    } catch (e) { window.toast('Δεν αποθηκεύτηκε: ' + e.message, 'error'); }
+  };
+  cards().forEach((card) => {
+    const label = card.querySelector('[data-dev-label]');
+    let last = label.value;
+    const commit = () => { if (label.value.trim() !== last.trim()) { last = label.value; save(card); } };
+    label.addEventListener('blur', commit);
+    label.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); label.blur(); }
+      if (e.key === 'Escape') { label.value = last; label.blur(); }
+    });
+    card.querySelector('[data-dev-enabled]').addEventListener('change', () => save(card));
+    card.querySelector('[data-dev-test]').addEventListener('click', async (e) => {
+      const btn = e.currentTarget; btn.disabled = true;
+      try { const d = await window.api('/notifications/devices/' + card.dataset.devId + '/test', { method: 'POST' }); window.toast(d.message); }
+      catch (err) { window.toast(err.message, 'error'); }
+      btn.disabled = false;
+    });
+    card.querySelector('[data-dev-delete]').addEventListener('click', async () => {
+      const name = label.value || label.placeholder.replace(' · δώσε όνομα', '');
+      if (!confirm('Να αφαιρεθεί η συσκευή «' + name + '»; Θα σταματήσει να λαμβάνει ειδοποιήσεις μέχρι να τις ενεργοποιήσεις ξανά σε αυτήν.')) return;
+      try {
+        await window.api('/notifications/devices/' + card.dataset.devId + '/delete', { method: 'POST' });
+        card.style.opacity = '.3';
+        window.toast('Η συσκευή αφαιρέθηκε.');
+        setTimeout(() => location.reload(), 600);
+      } catch (err) { window.toast(err.message, 'error'); }
+    });
+  });
+
+  box.querySelector('[data-dev-test-all]')?.addEventListener('click', async (e) => {
+    const btn = e.currentTarget; btn.disabled = true;
+    try { const d = await window.api('/notifications/test', { method: 'POST' }); window.toast(d.message); }
+    catch (err) { window.toast(err.message, 'error'); }
+    btn.disabled = false;
+  });
+  box.querySelectorAll('[data-dev-cleanup]').forEach((b) => b.addEventListener('click', async () => {
+    if (!confirm(b.textContent.trim() + ';')) return;
+    try {
+      const d = await window.api('/notifications/devices/cleanup', { method: 'POST', json: { what: b.dataset.devCleanup } });
+      window.toast(d.message);
+      setTimeout(() => location.reload(), 600);
+    } catch (err) { window.toast(err.message, 'error'); }
+  }));
 });
 </script>
