@@ -36,26 +36,46 @@ final class PushSender
         if (!$subs) {
             return $out;
         }
-        $push = new WebPush([
-            'VAPID' => [
-                'subject' => (string) Env::get('VAPID_SUBJECT', 'mailto:admin@example.com'),
-                'publicKey' => (string) Env::get('VAPID_PUBLIC_KEY'),
-                'privateKey' => (string) Env::get('VAPID_PRIVATE_KEY'),
-            ],
-        ], ['TTL' => 3600, 'urgency' => 'high'], 20, Env::get('CURL_CA_BUNDLE') ? ['verify' => Env::get('CURL_CA_BUNDLE')] : []);
-        $push->setReuseVAPIDHeaders(true);
+        try {
+            $push = new WebPush([
+                'VAPID' => [
+                    'subject' => trim((string) Env::get('VAPID_SUBJECT', 'mailto:admin@example.com')),
+                    'publicKey' => trim((string) Env::get('VAPID_PUBLIC_KEY')),
+                    'privateKey' => trim((string) Env::get('VAPID_PRIVATE_KEY')),
+                ],
+            ], ['TTL' => 3600, 'urgency' => 'high'], 20, Env::get('CURL_CA_BUNDLE') ? ['verify' => Env::get('CURL_CA_BUNDLE')] : []);
+            $push->setReuseVAPIDHeaders(true);
+        } catch (\Throwable $e) {
+            App::log('push: invalid VAPID configuration: ' . $e->getMessage());
+            $out['failed'] = count($subs);
+            $out['errors'][] = 'Λάθος ρύθμιση VAPID στο .env: ' . $e->getMessage();
+            return $out;
+        }
         $json = (string) json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         $byEndpoint = [];
         foreach ($subs as $s) {
             $byEndpoint[$s['endpoint']] = $s;
-            $push->queueNotification(Subscription::create([
-                'endpoint' => $s['endpoint'],
-                'publicKey' => $s['p256dh'],
-                'authToken' => $s['auth'],
-                'contentEncoding' => 'aes128gcm',
-            ]), $json);
+            try {
+                $push->queueNotification(Subscription::create([
+                    'endpoint' => $s['endpoint'],
+                    'publicKey' => $s['p256dh'],
+                    'authToken' => $s['auth'],
+                    'contentEncoding' => 'aes128gcm',
+                ]), $json);
+            } catch (\Throwable $e) {
+                $out['failed']++;
+                $out['errors'][] = 'Μη έγκυρη συνδρομή συσκευής: ' . $e->getMessage();
+            }
         }
-        foreach ($push->flush() as $report) {
+        try {
+            $reports = iterator_to_array($push->flush(), false);
+        } catch (\Throwable $e) {
+            App::log('push: send failed: ' . $e->getMessage());
+            $out['failed'] += count($byEndpoint);
+            $out['errors'][] = 'Αποτυχία αποστολής: ' . $e->getMessage();
+            return $out;
+        }
+        foreach ($reports as $report) {
             $endpoint = $report->getEndpoint();
             $sub = $byEndpoint[$endpoint] ?? null;
             if ($report->isSuccess()) {
