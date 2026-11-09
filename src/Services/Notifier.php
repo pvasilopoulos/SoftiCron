@@ -496,10 +496,10 @@ final class Notifier
         }
         $in = implode(',', array_fill(0, count($ids), '?'));
         $rows = App::db()->all(
-            "SELECT s.label, s.user_agent, u.name FROM push_subscriptions s JOIN users u ON u.id = s.user_id WHERE s.id IN ($in) ORDER BY u.name, s.id",
+            "SELECT s.label, s.user_agent, COALESCE(s.user_display, u.name) AS name, COALESCE(s.username, u.email) AS username FROM push_subscriptions s JOIN users u ON u.id = s.user_id WHERE s.id IN ($in) ORDER BY u.name, s.id",
             $ids,
         );
-        $names = array_map(fn ($r) => ($r['label'] ?: ($r['user_agent'] ?: 'Συσκευή')) . ' (' . $r['name'] . ')', $rows);
+        $names = array_map(fn ($r) => ($r['label'] ?: ($r['user_agent'] ?: 'Συσκευή')) . ' (' . $r['name'] . ' · ' . $r['username'] . ')', $rows);
         return mb_substr(implode(', ', $names) ?: count($ids) . ' συσκευές', 0, 255);
     }
 

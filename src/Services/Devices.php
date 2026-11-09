@@ -76,8 +76,11 @@ final class Devices
     {
         [$platform, $browser] = self::parseAgent($ua);
         $tz = (string) ($meta['tz'] ?? '');
+        $user = App::db()->one('SELECT email, name FROM users WHERE id = ?', [$userId]);
         $data = [
             'user_id' => $userId,
+            'username' => $user['email'] ?? null,
+            'user_display' => $user['name'] ?? null,
             'endpoint' => $endpoint,
             'endpoint_hash' => hash('sha256', $endpoint),
             'p256dh' => mb_substr((string) $keys['p256dh'], 0, 255),
@@ -95,9 +98,9 @@ final class Devices
         ];
         $db = App::db();
         $db->exec(
-            'INSERT INTO push_subscriptions (user_id, endpoint, endpoint_hash, p256dh, auth, user_agent, provider, platform, browser, full_user_agent, is_pwa, language, timezone, screen, created_ip, last_ip, last_seen_at)
-             VALUES (:user_id, :endpoint, :endpoint_hash, :p256dh, :auth, :user_agent, :provider, :platform, :browser, :full_user_agent, :is_pwa, :language, :timezone, :screen, :last_ip, :last_ip2, UTC_TIMESTAMP())
-             ON DUPLICATE KEY UPDATE user_id = VALUES(user_id), p256dh = VALUES(p256dh), auth = VALUES(auth), user_agent = VALUES(user_agent),
+            'INSERT INTO push_subscriptions (user_id, username, user_display, endpoint, endpoint_hash, p256dh, auth, user_agent, provider, platform, browser, full_user_agent, is_pwa, language, timezone, screen, created_ip, last_ip, last_seen_at)
+             VALUES (:user_id, :username, :user_display, :endpoint, :endpoint_hash, :p256dh, :auth, :user_agent, :provider, :platform, :browser, :full_user_agent, :is_pwa, :language, :timezone, :screen, :last_ip, :last_ip2, UTC_TIMESTAMP())
+             ON DUPLICATE KEY UPDATE user_id = VALUES(user_id), username = VALUES(username), user_display = VALUES(user_display), p256dh = VALUES(p256dh), auth = VALUES(auth), user_agent = VALUES(user_agent),
                provider = VALUES(provider), platform = VALUES(platform), browser = VALUES(browser), full_user_agent = VALUES(full_user_agent),
                is_pwa = VALUES(is_pwa), language = VALUES(language), timezone = VALUES(timezone), screen = VALUES(screen),
                last_ip = VALUES(last_ip), last_seen_at = UTC_TIMESTAMP()',

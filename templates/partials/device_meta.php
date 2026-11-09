@@ -5,6 +5,7 @@ use App\Services\Devices;
 $healthy = (int) ($d['fail_count'] ?? 0) === 0;
 ?>
 <span class="device-meta">
+  <?php if (!empty($d['username'])): ?><span class="tag" title="Χρήστης που καταχώρισε τη συσκευή"><?= icon('user', 11) ?> <?= e($d['username']) ?><?= !empty($d['user_display']) ? ' · ' . e($d['user_display']) : '' ?></span><?php endif; ?>
   <span class="tag" title="<?= e($d['full_user_agent'] ?? '') ?>"><?= e(trim(($d['platform'] ?? '') . ' · ' . ($d['browser'] ?? ''), ' ·') ?: ($d['user_agent'] ?: 'Συσκευή')) ?></span>
   <span class="tag" title="Υπηρεσία push"><?= e(Devices::PROVIDERS[$d['provider'] ?? 'other'] ?? 'Άλλος') ?></span>
   <?php if (!empty($d['is_pwa'])): ?><span class="tag" style="color:var(--accent-text)" title="Εγκατεστημένη στην αρχική οθόνη">PWA</span><?php endif; ?>

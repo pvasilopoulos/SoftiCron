@@ -45,8 +45,8 @@ final class DeviceController extends Controller
             default => '',
         };
         if ($f['q'] !== '') {
-            $where .= ' AND (u.name LIKE :q1 OR u.email LIKE :q2 OR s.label LIKE :q3 OR s.platform LIKE :q4 OR s.browser LIKE :q5 OR s.last_ip LIKE :q6)';
-            foreach (range(1, 6) as $i) {
+            $where .= ' AND (u.name LIKE :q1 OR u.email LIKE :q2 OR s.label LIKE :q3 OR s.platform LIKE :q4 OR s.browser LIKE :q5 OR s.last_ip LIKE :q6 OR s.username LIKE :q7)';
+            foreach (range(1, 7) as $i) {
                 $p["q$i"] = '%' . $f['q'] . '%';
             }
         }
