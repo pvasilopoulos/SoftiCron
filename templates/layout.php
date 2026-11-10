@@ -29,11 +29,18 @@ $admin = [
 $tenants = Auth::tenants();
 $feedUnread = $tenant ? App\Services\InAppFeed::unread((int) Auth::id(), (int) $tenant['id']) : 0;
 $logoUrl = $tenant && $tenant['logo_path'] ? url('branding/' . $tenant['id'] . '/logo') . '?v=' . rawurlencode((string) $tenant['logo_path']) : null;
-$link = function (array $it) use ($nav, $failing): string {
+// Short labels for the tablet icon rail.
+$short = [
+    'dashboard' => 'Αρχική', 'reports' => 'Αναφορές', 'templates' => 'Templates', 'notifications' => 'Ειδοπ/σεις', 'variables' => 'Μεταβλητές',
+    'devices' => 'Συσκευές', 'status-page' => 'Status', 'audit' => 'Audit', 'settings' => 'Ρυθμίσεις', 'admin' => 'Tenants', 'system' => 'Σύστημα',
+    'connectors' => 'Connectors', 'runs' => 'Εκτελέσεις',
+];
+$link = function (array $it) use ($nav, $failing, $short): string {
     [$key, $href, $label, $ic] = $it;
     $cls = $nav === $key ? ' class="active" aria-current="page"' : '';
-    $count = $key === 'jobs' && $failing ? '<span class="count">' . $failing . '</span>' : '';
-    return '<a href="' . e(url($href)) . '"' . $cls . ' title="' . e($label) . '">' . icon($ic) . '<span>' . e($label) . '</span>' . $count . '</a>';
+    $count = $key === 'jobs' && $failing ? '<span class="count">' . $failing . '</span><i class="rail-dot" aria-hidden="true"></i>' : '';
+    return '<a href="' . e(url($href)) . '"' . $cls . ' title="' . e($label) . '">' . icon($ic)
+        . '<span class="nl">' . e($label) . '</span><span class="ns" aria-hidden="true">' . e($short[$key] ?? $label) . '</span>' . $count . '</a>';
 };
 echo App\Core\View::partial('partials/head', ['title' => $title ?? '']);
 ?>
@@ -46,6 +53,7 @@ echo App\Core\View::partial('partials/head', ['title' => $title ?? '']);
         <strong><?= e($tenant['name'] ?? App\Core\App::name()) ?></strong>
         <span><?= e(Auth::roleName() ?? '') ?></span>
       </div>
+      <button class="btn btn-icon btn-ghost drawer-x" type="button" data-drawer-close aria-label="Κλείσιμο μενού"><?= icon('x', 18) ?></button>
     </div>
     <?php if (count($tenants) > 1 || Auth::isSuperAdmin()): ?>
       <?php
@@ -112,9 +120,13 @@ echo App\Core\View::partial('partials/head', ['title' => $title ?? '']);
   <div class="drawer-backdrop" data-drawer-close></div>
 
   <div class="main">
-    <header class="mobile-header">
-      <div class="logo" style="width:32px;height:32px;border-radius:9px;font-size:12px"><?php if ($logoUrl): ?><img src="<?= e($logoUrl) ?>" alt=""><?php else: ?><?= e(initials($tenant['name'] ?? 'C A')) ?><?php endif; ?></div>
-      <span class="title"><?= e($title ?? '') ?></span>
+    <header class="mobile-header" data-mobile-header>
+      <a class="btn btn-icon btn-sm btn-ghost mh-back" href="#" data-mh-back hidden aria-label="Πίσω"><?= icon('chevron-left', 22) ?></a>
+      <button type="button" class="logo mh-logo" data-drawer-open aria-label="Άνοιγμα μενού" style="width:32px;height:32px;border-radius:9px;font-size:12px;border:0;cursor:pointer;padding:0"><?php if ($logoUrl): ?><img src="<?= e($logoUrl) ?>" alt=""><?php else: ?><?= e(initials($tenant['name'] ?? 'C A')) ?><?php endif; ?></button>
+      <span class="title">
+        <span class="t-tenant"><?= e($tenant['name'] ?? App\Core\App::name()) ?></span>
+        <span class="t-page" aria-hidden="true"><?= e($title ?? '') ?></span>
+      </span>
       <?php if ($tenant): ?><button class="btn btn-icon btn-sm feed-bell" type="button" data-feed-toggle aria-label="Ειδοποιήσεις<?= $feedUnread ? ' (' . $feedUnread . ' νέες)' : '' ?>" aria-haspopup="dialog" aria-expanded="false" title="Ειδοποιήσεις"><?= icon('bell') ?><span class="feed-badge" data-feed-badge<?= $feedUnread ? '' : ' hidden' ?>><?= $feedUnread > 99 ? '99+' : $feedUnread ?></span></button><?php endif; ?>
       <button class="btn btn-icon btn-sm" type="button" data-theme-toggle aria-label="Αλλαγή θέματος"><?= icon('moon') ?></button>
     </header>
@@ -140,9 +152,9 @@ echo App\Core\View::partial('partials/head', ['title' => $title ?? '']);
 
 <nav class="bottom-nav" aria-label="Γρήγορη πλοήγηση">
   <?php foreach (App\Services\BottomNav::forCurrentUser() as $bn): ?>
-    <a href="<?= e($bn['url']) ?>" class="<?= $nav === $bn['nav'] ? 'active' : '' ?>"<?= $nav === $bn['nav'] ? ' aria-current="page"' : '' ?>><?= icon($bn['icon'], 22) ?><?= e($bn['label']) ?></a>
+    <a href="<?= e($bn['url']) ?>" class="<?= $nav === $bn['nav'] ? 'active' : '' ?>"<?= $nav === $bn['nav'] ? ' aria-current="page"' : '' ?>><span class="bn-ic"><?= icon($bn['icon'], 22) ?><?php if ($bn['nav'] === 'jobs' && $failing): ?><span class="bn-badge" aria-label="<?= $failing ?> με πρόβλημα"><?= $failing > 99 ? '99+' : $failing ?></span><?php endif; ?></span><span class="bn-label"><?= e($bn['label']) ?></span></a>
   <?php endforeach; ?>
-  <button type="button" data-drawer-open><?= icon('menu', 22) ?>Μενού</button>
+  <button type="button" data-drawer-open aria-controls="sidebar"><span class="bn-ic"><?= icon('menu', 22) ?></span><span class="bn-label">Μενού</span></button>
 </nav>
 <?php if ($tenant): ?>
 <div class="feed-backdrop" data-feed-close hidden></div>

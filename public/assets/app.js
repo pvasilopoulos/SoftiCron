@@ -56,9 +56,106 @@
   document.addEventListener('DOMContentLoaded', () => {
     deviceHeartbeat();
     // Mobile drawer
-    document.querySelectorAll('[data-drawer-open]').forEach((b) => b.addEventListener('click', () => document.body.classList.add('drawer-open')));
-    document.querySelectorAll('[data-drawer-close]').forEach((b) => b.addEventListener('click', () => document.body.classList.remove('drawer-open')));
-    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') document.body.classList.remove('drawer-open'); });
+    const sidebar = document.getElementById('sidebar');
+    const openDrawer = () => {
+      document.body.classList.add('drawer-open');
+      document.querySelectorAll('[data-drawer-open]').forEach((b) => b.setAttribute('aria-expanded', 'true'));
+      setTimeout(() => sidebar?.querySelector('.nav a.active, .nav a')?.focus({ preventScroll: true }), 220);
+    };
+    const closeDrawer = () => {
+      if (!document.body.classList.contains('drawer-open')) return;
+      document.body.classList.remove('drawer-open');
+      document.querySelectorAll('[data-drawer-open]').forEach((b) => b.setAttribute('aria-expanded', 'false'));
+    };
+    document.querySelectorAll('[data-drawer-open]').forEach((b) => b.addEventListener('click', openDrawer));
+    document.querySelectorAll('[data-drawer-close]').forEach((b) => b.addEventListener('click', closeDrawer));
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDrawer(); });
+    sidebar?.querySelectorAll('.nav a').forEach((a) => a.addEventListener('click', closeDrawer));
+    // Swipe left on the drawer closes it.
+    if (sidebar) {
+      let sx = null, sy = 0;
+      sidebar.addEventListener('touchstart', (e) => { sx = e.touches[0].clientX; sy = e.touches[0].clientY; }, { passive: true });
+      sidebar.addEventListener('touchend', (e) => {
+        if (sx === null) return;
+        const dx = e.changedTouches[0].clientX - sx, dy = Math.abs(e.changedTouches[0].clientY - sy);
+        if (dx < -60 && dy < 50) closeDrawer();
+        sx = null;
+      }, { passive: true });
+    }
+
+    // Mobile header: tenant name until the page title scrolls away, then the page title; back arrow on sub-pages.
+    const mh = document.querySelector('[data-mobile-header]');
+    if (mh) {
+      const h1 = document.querySelector('#content h1');
+      if (h1 && 'IntersectionObserver' in window) {
+        new IntersectionObserver(([en]) => mh.classList.toggle('scrolled', !en.isIntersecting), { rootMargin: '-56px 0px 0px 0px' }).observe(h1);
+      } else {
+        mh.classList.add('scrolled');
+      }
+      const crumbs = document.querySelectorAll('#content .breadcrumb a');
+      const back = mh.querySelector('[data-mh-back]');
+      if (crumbs.length && back) {
+        const parent = crumbs[crumbs.length - 1];
+        back.href = parent.href;
+        back.setAttribute('aria-label', 'Πίσω: ' + parent.textContent.trim());
+        back.hidden = false;
+        mh.classList.add('has-back');
+      }
+    }
+
+    // Filter forms: on phones only the search is shown, the rest behind a "Φίλτρα" button.
+    document.querySelectorAll('form.filters').forEach((f) => {
+      const main = f.querySelector('.filters-main');
+      if (!main) return;
+      const active = Array.from(f.querySelectorAll('select, input:not([type="hidden"]):not([name="q"])'))
+        .filter((el) => (el.type === 'checkbox' ? el.checked : el.value !== '')).length;
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'btn f-toggle';
+      btn.setAttribute('aria-expanded', 'false');
+      btn.innerHTML = '<svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M3 5h18M6 12h12M10 19h4"/></svg><span>Φίλτρα</span>'
+        + (active ? '<span class="jk-count">' + active + '</span>' : '');
+      btn.addEventListener('click', () => {
+        const open = f.classList.toggle('f-open');
+        btn.setAttribute('aria-expanded', String(open));
+        btn.classList.toggle('on', open);
+      });
+      const search = main.querySelector('.searchbar');
+      search ? search.after(btn) : main.prepend(btn);
+    });
+
+    // Sticky save bar for long forms whose "Αποθήκευση" sits in the page header (phone + tablet).
+    const headSave = document.querySelector('.page-head button.btn-primary[type="submit"][form]');
+    const saveForm = headSave && document.getElementById(headSave.getAttribute('form'));
+    if (headSave && saveForm && 'IntersectionObserver' in window) {
+      const bar = document.createElement('div');
+      bar.className = 'save-bar';
+      bar.setAttribute('role', 'region');
+      bar.setAttribute('aria-label', 'Αποθήκευση');
+      const txt = document.createElement('span');
+      txt.className = 'sb-text';
+      txt.textContent = 'Καμία αλλαγή ακόμα';
+      const b = headSave.cloneNode(true);
+      b.removeAttribute('id');
+      bar.append(txt, b);
+      document.body.appendChild(bar);
+      let headVisible = true, dirty = false;
+      const sync = () => {
+        const show = !headVisible && window.matchMedia('(max-width: 1180px)').matches;
+        bar.classList.toggle('show', show);
+        document.documentElement.classList.toggle('has-save-bar', show);
+      };
+      new IntersectionObserver(([en]) => { headVisible = en.isIntersecting; sync(); }).observe(headSave);
+      const markDirty = () => {
+        if (dirty) return;
+        dirty = true;
+        bar.classList.add('dirty');
+        txt.textContent = '● Δεν αποθηκεύτηκαν';
+      };
+      saveForm.addEventListener('input', markDirty);
+      saveForm.addEventListener('change', markDirty);
+      addEventListener('resize', sync);
+    }
 
     // Theme toggle (cycles light/dark, persisted on the server profile)
     document.querySelectorAll('[data-theme-toggle]').forEach((b) => b.addEventListener('click', async () => {

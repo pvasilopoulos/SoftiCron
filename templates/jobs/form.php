@@ -314,7 +314,7 @@ curl -fsS --data-raw "$output" <?= e($pingBase) ?><?= '$( [ $code -ne 0 ] && ech
     <fieldset class="card stack" style="margin:0;min-width:0" <?= $canManage ? '' : 'disabled' ?>>
       <h2>Ειδοποιήσεις</h2>
       <div class="table-wrap">
-        <table class="table" style="font-size:13px">
+        <table class="table notify-matrix" style="font-size:13px">
           <?php $channels = Notifier::availableChannels((int) $tenant['id']); foreach (array_keys($notify) as $_ev) { foreach (array_keys($notify[$_ev]) as $_ch) { if (!isset($channels[$_ch]) && isset(Notifier::CHANNELS[$_ch])) { $channels[$_ch] = Notifier::CHANNELS[$_ch]; } } } ?>
           <thead><tr><th style="padding-left:0">Γεγονός</th><?php foreach ($channels as $ch => $l): ?><th style="text-align:center"><?= e($l) ?></th><?php endforeach; ?></tr></thead>
           <tbody>

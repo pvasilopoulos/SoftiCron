@@ -648,3 +648,180 @@ html[data-hold-refresh] .content { padding-bottom: 110px; }
   .field-inline { flex: 1 1 140px; }
   .field-inline .select { width: 100%; }
 }
+
+/* =====================================================================
+   Mobile & tablet refinements
+   ===================================================================== */
+.nav a .ns, .drawer-x, .rail-dot { display: none; }
+.mobile-header .title { position: relative; display: grid; }
+.mobile-header .title > span { grid-area: 1 / 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; transition: opacity .18s ease, transform .18s ease; }
+.mobile-header .t-page { opacity: 0; transform: translateY(6px); }
+.mobile-header.scrolled .t-tenant { opacity: 0; transform: translateY(-6px); }
+.mobile-header.scrolled .t-page { opacity: 1; transform: none; }
+.mobile-header.has-back .mh-logo { display: none; }
+.mh-back { width: 36px !important; margin-left: -8px; }
+.mh-back[hidden] { display: none !important; }
+.bn-ic { position: relative; display: grid; place-items: center; width: 52px; height: 30px; border-radius: 999px; transition: background .15s; }
+.bn-badge { position: absolute; top: -3px; right: 6px; min-width: 17px; height: 17px; padding: 0 4px; border-radius: 9px; background: #DC2626; color: #fff; font-size: 10.5px; font-weight: 700; line-height: 17px; text-align: center; box-shadow: 0 0 0 2px var(--surface); }
+.save-bar { display: none; }
+
+/* ---- Tablet: labelled icon rail ---- */
+@media (min-width: 761px) and (max-width: 1180px) {
+  .sidebar { width: 84px; padding: 16px 6px; gap: 14px; }
+  .sidebar .nav { gap: 4px; align-items: center; }
+  .sidebar .nav a { position: relative; flex-direction: column; gap: 3px; width: 72px; height: auto; min-height: 54px; padding: 7px 2px; border-radius: 12px; }
+  .sidebar .nav a .ns { display: block; font-size: 10.5px; font-weight: 600; line-height: 1.15; text-align: center; max-width: 68px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sidebar .nav a .nl { display: none; }
+  .sidebar .nav-label { display: block; height: 1px; width: 40px; margin: 8px auto; padding: 0; overflow: hidden; color: transparent; background: var(--border); }
+  .sidebar .rail-dot { display: block; position: absolute; top: 6px; right: 16px; width: 8px; height: 8px; border-radius: 50%; background: #DC2626; box-shadow: 0 0 0 2px var(--surface); }
+}
+
+/* ---- Touch devices: bigger targets ---- */
+@media (pointer: coarse) {
+  .btn-sm { min-height: 40px; }
+  .btn-sm.btn-icon { width: 40px !important; }
+  .chip, .stat-chip { min-height: 38px; }
+  .check input, .jcheck input { width: 20px; height: 20px; }
+  .jcheck { width: 28px; height: 28px; }
+  .pagination a, .pagination span { min-width: 44px; min-height: 44px; }
+}
+
+/* ---- Responsive tables become cards (tablet + phone) ---- */
+@media (max-width: 900px) {
+  .table.rtable thead { display: none; }
+  .table.rtable, .table.rtable tbody { display: block; width: 100%; }
+  .table.rtable tr { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 12px 18px; width: auto; padding: 14px 16px; border-top: 1px solid var(--border); }
+  .table.rtable tbody tr:first-child { border-top: 0; }
+  .table.rtable td { display: flex; flex-direction: column; align-items: flex-start; justify-content: flex-start; gap: 3px; width: auto; min-width: 0; padding: 0 !important; border: 0; text-align: left; }
+  .table.rtable td::before { content: attr(data-label); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  .table.rtable td:not([data-label])::before, .table.rtable td.primary::before, .table.rtable td[data-label="Ενέργειες"]::before { content: none; }
+  .table.rtable td.primary { grid-column: 1 / -1; display: block; font-size: 15px; }
+  .table.rtable td[data-label="Ενέργειες"], .table.rtable td.num:not([data-label]) { grid-column: 1 / -1; flex-direction: row; align-items: center; justify-content: flex-end; flex-wrap: wrap; padding-top: 10px !important; border-top: 1px dashed var(--border); }
+  .table.rtable td .row, .table.rtable td .row-actions { justify-content: flex-start; }
+  .table.rtable td[data-label="Ενέργειες"] .row, .table.rtable td[data-label="Ενέργειες"] .row-actions, .table.rtable td.num:not([data-label]) .row-actions { justify-content: flex-end; width: 100%; }
+  .table.rtable tr:hover td { background: transparent; }
+  .table.rtable tr.group-row { display: block; padding: 0; }
+  .table.rtable tr.group-row td { display: block; padding: 10px 16px !important; background: var(--surface-2); border-top: 1px solid var(--border); }
+  .table.rtable tr.group-row td::before { content: none; }
+  .table.rtable tr[hidden] { display: none; }
+  .jobs-table tr.jrow.is-failing td:first-child { box-shadow: none; }
+  .jobs-table tr.jrow.is-failing { box-shadow: inset 3px 0 0 #DC2626; }
+  .jobs-table tr.jrow.selected { background: var(--accent-soft); }
+  .jobs-table tr.jrow.selected td { background: transparent; }
+  .jurl, .jdesc { max-width: 100%; }
+  .spark { width: 100%; max-width: 200px; }
+}
+
+/* Jobs list is wide: cards on every tablet size */
+@media (min-width: 901px) and (max-width: 1180px) {
+  .table.rtable.jobs-table thead { display: none; }
+  .table.rtable.jobs-table, .table.rtable.jobs-table tbody { display: block; width: 100%; }
+  .table.rtable.jobs-table tr { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 12px 18px; width: auto; padding: 14px 16px; border-top: 1px solid var(--border); }
+  .table.rtable.jobs-table tbody tr:first-child { border-top: 0; }
+  .table.rtable.jobs-table td { display: flex; flex-direction: column; align-items: flex-start; justify-content: flex-start; gap: 3px; width: auto; min-width: 0; padding: 0 !important; border: 0; text-align: left; }
+  .table.rtable.jobs-table td::before { content: attr(data-label); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  .table.rtable.jobs-table td:not([data-label])::before, .table.rtable.jobs-table td.primary::before, .table.rtable.jobs-table td[data-label="Ενέργειες"]::before { content: none; }
+  .table.rtable.jobs-table td.primary { grid-column: 1 / -1; display: block; font-size: 15px; }
+  .table.rtable.jobs-table td[data-label="Ενέργειες"], .table.rtable.jobs-table td.num:not([data-label]) { grid-column: 1 / -1; flex-direction: row; align-items: center; justify-content: flex-end; flex-wrap: wrap; padding-top: 10px !important; border-top: 1px dashed var(--border); }
+  .table.rtable.jobs-table td .row, .table.rtable.jobs-table td .row-actions { justify-content: flex-start; }
+  .table.rtable.jobs-table td[data-label="Ενέργειες"] .row, .table.rtable.jobs-table td[data-label="Ενέργειες"] .row-actions, .table.rtable.jobs-table td.num:not([data-label]) .row-actions { justify-content: flex-end; width: 100%; }
+  .table.rtable.jobs-table tr:hover td { background: transparent; }
+  .table.rtable.jobs-table tr.group-row { display: block; padding: 0; }
+  .table.rtable.jobs-table tr.group-row td { display: block; padding: 10px 16px !important; background: var(--surface-2); border-top: 1px solid var(--border); }
+  .table.rtable.jobs-table tr.group-row td::before { content: none; }
+  .table.rtable.jobs-table tr[hidden] { display: none; }
+  .jobs-table tr.jrow { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+}
+
+@media (max-width: 1180px) {
+  .jobs-table td[data-label="Ενεργό"] { flex-direction: row !important; align-items: center !important; gap: 8px; padding-top: 10px !important; border-top: 1px dashed var(--border); }
+  .jobs-table td[data-label="Ενέργειες"] { grid-column: 2 / -1 !important; }
+}
+
+/* ---- Phones ---- */
+@media (max-width: 760px) {
+  .sidebar .nav a .ns, .sidebar .rail-dot { display: none; }
+  .sidebar .nav a .nl { display: inline; }
+  .sidebar .brand .drawer-x { display: inline-flex; margin-left: auto; }
+  .sidebar { width: min(300px, 86vw); padding-bottom: calc(18px + env(safe-area-inset-bottom)); }
+  body.drawer-open { overflow: hidden; }
+  body.drawer-open .drawer-backdrop { animation: fadeIn .2s ease; }
+  .mobile-header { padding: 10px 12px; padding-top: calc(10px + env(safe-area-inset-top)); transition: box-shadow .2s; }
+  .mobile-header.scrolled { box-shadow: 0 4px 14px rgba(15, 23, 42, .08); }
+  .mobile-header .t-tenant { font-size: 15px; }
+  .bottom-nav { box-shadow: 0 -4px 14px rgba(15, 23, 42, .05); }
+  .bottom-nav a, .bottom-nav button { gap: 2px; -webkit-tap-highlight-color: transparent; }
+  .bottom-nav .active .bn-ic { background: var(--accent-soft); }
+  .bottom-nav a:active .bn-ic, .bottom-nav button:active .bn-ic { background: var(--surface-3); }
+  .bn-label { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* No zoom-on-focus in iOS: form fields at 16px */
+  .input, .select, .textarea, .searchbar input, .chip-input input, .feed-search input, .ts-search input { font-size: 16px; }
+  .input.mono, .textarea.mono { font-size: 15px; }
+
+  /* Page head: title on its own line, actions in a tidy row */
+  .page-head { align-items: stretch; }
+  .page-head > .row { width: 100%; flex-wrap: wrap; }
+  .page-head > .row > * { flex: 1 1 auto; }
+  .page-head > .row > .btn-primary { flex-basis: 100%; }
+  .page-head > .row form.inline .btn { width: 100%; }
+  .page-head .sub { font-size: 13px; }
+
+  /* Horizontal, swipeable chip rows */
+  .stat-chips, .jobs-toolbar > .chips { flex-wrap: nowrap; overflow-x: auto; margin: 0 -16px; padding: 2px 16px; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+  .stat-chips::-webkit-scrollbar, .jobs-toolbar > .chips::-webkit-scrollbar { display: none; }
+  .stat-chip, .jobs-toolbar .chip { flex: none; }
+  .tabs { margin: 0 -16px; padding: 0 16px; scrollbar-width: none; }
+  .tabs::-webkit-scrollbar { display: none; }
+
+  /* Collapsible filter forms */
+  .jobs-toolbar > .row { flex-wrap: nowrap; }
+  .jobs-toolbar .searchbar, .filters-main .searchbar { flex: 1 1 calc(100% - 130px); min-width: 0; }
+  .jobs-toolbar .kbd, .topbar kbd { display: none; }
+  .filters { padding: 12px; }
+  .filters-main > .select { flex: 1 1 140px; width: auto !important; min-width: 0 !important; }
+  .filters-main > .btn { flex: 1 1 100%; }
+  form.filters:not(.f-open) .filters-main > :not(.searchbar):not(.f-toggle),
+  form.filters:not(.f-open) > details, form.filters:not(.f-open) > .filters-more { display: none; }
+  .f-toggle { display: inline-flex; flex: none !important; }
+
+  /* Cards & KPI */
+  .card { border-radius: 14px; }
+  .jobs-kpis { display: flex; gap: 10px; overflow-x: auto; margin: 0 -16px; padding: 2px 16px; scrollbar-width: none; scroll-snap-type: x mandatory; }
+  .jobs-kpis::-webkit-scrollbar { display: none; }
+  .jk { flex: 0 0 150px; padding: 12px 14px; scroll-snap-align: start; }
+  .jk-value { font-size: 20px; }
+  .kv { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+  /* Toasts above the bottom nav, full width */
+  .toast-wrap { left: 12px; right: 12px; bottom: calc(76px + env(safe-area-inset-bottom)); max-width: none; }
+  .toast { max-width: none; }
+
+  /* Dialogs as bottom sheets */
+  dialog { width: 100%; max-width: 100%; margin: auto 0 0; border-radius: 18px 18px 0 0; padding-bottom: env(safe-area-inset-bottom); }
+
+  /* Bulk bar above the bottom nav */
+  .bulk-bar { left: 12px; right: 12px; transform: none; bottom: calc(76px + env(safe-area-inset-bottom)); max-width: none; justify-content: space-between; padding: 8px 10px; overflow-x: auto; animation: none; }
+  .bulk-bar .bulk-sep { display: none; }
+}
+@keyframes fadeIn { from { opacity: 0; } }
+@media (min-width: 761px) { .f-toggle { display: none !important; } }
+
+/* ---- Sticky save bar (long forms, phone + tablet) ---- */
+@media (max-width: 1180px) {
+  .save-bar { display: flex; position: fixed; left: 50%; bottom: 16px; z-index: 45; transform: translate(-50%, 24px); opacity: 0; visibility: hidden; pointer-events: none; align-items: center; gap: 10px; width: min(560px, calc(100vw - 24px)); padding: 8px 8px 8px 16px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); box-shadow: var(--shadow-lg); transition: transform .2s ease, opacity .2s ease, visibility .2s; }
+  .save-bar.show { transform: translate(-50%, 0); opacity: 1; visibility: visible; pointer-events: auto; }
+  .save-bar .sb-text { flex: 1; min-width: 0; font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .save-bar.dirty .sb-text { color: var(--warn-fg); font-weight: 600; }
+}
+@media (max-width: 760px) {
+  .save-bar { bottom: calc(74px + env(safe-area-inset-bottom)); }
+  html.has-save-bar .content { padding-bottom: 160px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mobile-header .title > span, .save-bar, .sidebar { transition: none; }
+}
+
+/* Event x channel matrix: event column stays visible while scrolling sideways */
+.notify-matrix th:first-child, .notify-matrix td:first-child { position: sticky; left: 0; z-index: 1; background: var(--surface); box-shadow: 6px 0 8px -8px rgba(15, 23, 42, .25); }
+@media (max-width: 760px) { .notify-matrix td:first-child { min-width: 120px; white-space: normal; } }
