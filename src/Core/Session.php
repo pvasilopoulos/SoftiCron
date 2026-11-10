@@ -32,6 +32,31 @@ final class Session
         session_start();
     }
 
+    private static bool $released = false;
+
+    /**
+     * Writes the session and releases its file lock, so other requests of the same browser
+     * are not blocked while this one does slow work (e.g. calling a job's URL). $_SESSION
+     * stays readable; every write through this class reopens the session first (resume()).
+     */
+    public static function release(): void
+    {
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            unset($_SESSION['_old']); // index.php clears it after the action, which would not be saved now
+            session_write_close();
+            self::$released = true;
+        }
+    }
+
+    /** Reopens a released session, reloading what other requests stored meanwhile. */
+    public static function resume(): void
+    {
+        if (self::$released && session_status() !== PHP_SESSION_ACTIVE && !headers_sent()) {
+            self::$released = false;
+            session_start();
+        }
+    }
+
     public static function get(string $key, mixed $default = null): mixed
     {
         return $_SESSION[$key] ?? $default;
@@ -39,11 +64,13 @@ final class Session
 
     public static function set(string $key, mixed $value): void
     {
+        self::resume();
         $_SESSION[$key] = $value;
     }
 
     public static function forget(string $key): void
     {
+        self::resume();
         unset($_SESSION[$key]);
     }
 
@@ -62,11 +89,13 @@ final class Session
 
     public static function flash(string $type, string $message): void
     {
+        self::resume();
         $_SESSION['_flash'][] = ['type' => $type, 'message' => $message];
     }
 
     public static function takeFlash(): array
     {
+        self::resume();
         $f = $_SESSION['_flash'] ?? [];
         unset($_SESSION['_flash']);
         return $f;

@@ -8,6 +8,7 @@ use App\Auth\Auth;
 use App\Core\Crypto;
 use App\Core\HttpException;
 use App\Core\Response;
+use App\Core\Session;
 use App\Services\Audit;
 use App\Services\Connectors;
 use App\Services\CronHelper;
@@ -202,6 +203,7 @@ final class JobController extends Controller
                 // Run up to 20 immediately (in parallel); the rest wait for the scheduler.
                 ignore_user_abort(true);
                 set_time_limit(180);
+                Session::release();
                 $claimed = array_values(array_filter(array_slice($runIds, 0, 20), fn ($id) => $scheduler->claim($id)));
                 if ($claimed) {
                     $scheduler->executeClaimed($claimed);
@@ -716,6 +718,7 @@ final class JobController extends Controller
         Audit::log('job.run_now', 'job', $id, $job['name']);
         ignore_user_abort(true);
         set_time_limit((int) $job['timeout_sec'] + 30);
+        Session::release(); // the call may take long: do not block the user's other requests
         $overlapBusy = $job['overlap_policy'] !== 'allow' && $this->db->value("SELECT 1 FROM job_runs WHERE job_id = ? AND status = 'running' AND id <> ?", [$id, $runId]);
         if (!$overlapBusy && $scheduler->claim($runId)) {
             $scheduler->executeClaimed([$runId]);
@@ -747,6 +750,7 @@ final class JobController extends Controller
         }
         $job = $data + ['id' => $existingId, 'tenant_id' => $tenant['id']];
         set_time_limit((int) $job['timeout_sec'] + 15);
+        Session::release();
         $ctx = TemplateRenderer::requestContext($job, $tenant, null, $existing['last_run_at'] ?? null);
         try {
             $req = HttpExecutor::buildRequest($job, $ctx);
