@@ -11,7 +11,7 @@ $items = [
     ['dashboard', '/', 'Επισκόπηση', 'dashboard', null],
     ['jobs', 'jobs', 'Jobs', 'jobs', 'jobs.view'],
     ['runs', 'runs', 'Εκτελέσεις', 'runs', 'runs.view'],
-    ['calendar', 'calendar', 'Ημερολόγιο', 'calendar', 'runs.view'],
+    ['calendar', 'calendar', 'Ημερολόγιο', 'calendar', 'calendar.view'],
     ['reports', 'reports', 'Αναφορές & SLA', 'dashboard', 'reports.view'],
     ['templates', 'templates', 'Templates μηνυμάτων', 'templates', 'templates.view'],
     ['connectors', 'connectors', 'Connectors', 'connectors', 'connectors.view'],

@@ -19,12 +19,17 @@ final class Permissions
         'jobs.import' => ['Jobs', 'Εισαγωγή jobs (JSON)', 'Δημιουργία jobs από αρχείο JSON.'],
         'jobs.versions' => ['Jobs', 'Ιστορικό εκδόσεων', 'Προβολή παλαιότερων εκδόσεων και αλλαγών ενός job.'],
         'jobs.restore' => ['Jobs', 'Επαναφορά έκδοσης', 'Επαναφέρει ένα job σε παλαιότερη έκδοση.'],
+        'jobs.assertions' => ['Jobs', 'Έλεγχοι απάντησης', 'Προσθήκη και αλλαγή ελέγχων στην απάντηση (πεδία JSON, headers, κείμενο, χρόνος). Χωρίς αυτό οι έλεγχοι φαίνονται μόνο για ανάγνωση.'],
 
         // Runs
         'runs.view' => ['Εκτελέσεις', 'Προβολή εκτελέσεων', 'Λίστα εκτελέσεων, λεπτομέρειες, απάντηση και logs.'],
         'runs.retry' => ['Εκτελέσεις', 'Επανάληψη εκτέλεσης', 'Ξανατρέχει μια ολοκληρωμένη εκτέλεση.'],
         'runs.export' => ['Εκτελέσεις', 'Εξαγωγή εκτελέσεων (CSV)', 'Λήψη εκτελέσεων σε CSV.'],
-        'incidents.ack' => ['Εκτελέσεις', 'Ανάληψη συμβάντος («Το είδα»)', 'Επιβεβαιώνει ότι κάποιος ασχολείται με ένα job που αποτυγχάνει· σταματά την κλιμάκωση και τις επαναλαμβανόμενες ειδοποιήσεις.'],
+        'calendar.view' => ['Εκτελέσεις', 'Ημερολόγιο εκτελέσεων', 'Μηνιαία και ημερήσια προβολή εκτελέσεων που έγιναν και προγραμματισμένων.'],
+
+        // Incidents
+        'incidents.ack' => ['Συμβάντα', 'Ανάληψη συμβάντος («Το είδα»)', 'Δηλώνει ότι ασχολείται με ένα job που αποτυγχάνει· σταματούν οι επαναλαμβανόμενες ειδοποιήσεις και η κλιμάκωση. Μπορεί να αναιρέσει τη δική του ανάληψη.'],
+        'incidents.unack' => ['Συμβάντα', 'Αναίρεση ανάληψης άλλων', 'Αναιρεί ανάληψη που έκανε άλλο μέλος ή κάποιος από σύνδεσμο ειδοποίησης.'],
 
         // Reports
         'reports.view' => ['Αναφορές & SLA', 'Προβολή αναφορών', 'Uptime, SLA, χρόνοι απόκρισης ανά job.'],
@@ -77,8 +82,9 @@ final class Permissions
         'jobs.create' => ['jobs.view'], 'jobs.edit' => ['jobs.view'], 'jobs.delete' => ['jobs.view'],
         'jobs.toggle' => ['jobs.view'], 'jobs.run' => ['jobs.view'], 'jobs.export' => ['jobs.view'],
         'jobs.import' => ['jobs.view', 'jobs.create'], 'jobs.versions' => ['jobs.view'],
-        'jobs.restore' => ['jobs.versions', 'jobs.edit'],
-        'runs.retry' => ['runs.view', 'jobs.run'], 'runs.export' => ['runs.view'], 'incidents.ack' => ['jobs.view'],
+        'jobs.restore' => ['jobs.versions', 'jobs.edit'], 'jobs.assertions' => ['jobs.edit'],
+        'runs.retry' => ['runs.view', 'jobs.run'], 'runs.export' => ['runs.view'], 'incidents.ack' => ['jobs.view'], 'incidents.unack' => ['incidents.ack'],
+        'calendar.view' => ['jobs.view'],
         'reports.export' => ['reports.view'], 'reports.email' => ['reports.view'],
         'connectors.manage' => ['connectors.view'], 'connectors.test' => ['connectors.view'],
         'templates.manage' => ['templates.view'], 'templates.test' => ['templates.view'],
@@ -91,7 +97,8 @@ final class Permissions
     /** Short description of each group (role editor). */
     public const GROUPS = [
         'Jobs' => 'Τι μπορεί να κάνει στα jobs.',
-        'Εκτελέσεις' => 'Ιστορικό εκτελέσεων και logs.',
+        'Εκτελέσεις' => 'Ιστορικό εκτελέσεων, logs και ημερολόγιο.',
+        'Συμβάντα' => 'Ανάληψη jobs που αποτυγχάνουν («Το είδα»).',
         'Αναφορές & SLA' => 'Uptime, SLA και εξαγωγές.',
         'Ειδοποιήσεις' => 'Ιστορικό απεσταλμένων ειδοποιήσεων.',
         'Connectors' => 'Email, Microsoft 365, Telegram, Slack, Teams, Discord, Webhook, SMS/Viber.',

@@ -18,7 +18,7 @@ final class BottomNav
         'jobs' => ['Jobs', 'jobs', 'jobs', 'jobs', 'jobs.view'],
         'new_job' => ['Νέο job', 'jobs/new', 'plus', 'jobs_new', 'jobs.create'],
         'runs' => ['Εκτελέσεις', 'runs', 'runs', 'runs', 'runs.view'],
-        'calendar' => ['Ημερολόγιο', 'calendar', 'calendar', 'calendar', 'runs.view'],
+        'calendar' => ['Ημερολόγιο', 'calendar', 'calendar', 'calendar', 'calendar.view'],
         'failed' => ['Αποτυχίες', 'runs?status=failed', 'x', 'runs_failed', 'runs.view'],
         'notifications' => ['Alerts', 'notifications', 'bell', 'notifications', null],
         'templates' => ['Templates', 'templates', 'templates', 'templates', 'templates.view'],

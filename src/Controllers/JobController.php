@@ -419,8 +419,13 @@ final class JobController extends Controller
         if (!preg_match('/^(\d{3}(-\d{3})?|\dxx)(,(\d{3}(-\d{3})?|\dxx))*$/i', $codes)) {
             $errors[] = 'Τα HTTP status επιτυχίας πρέπει να είναι π.χ. 200-299,304 ή 2xx.';
         }
-        [$assertions, $assertErrors] = \App\Services\Assertions::parse($r->input('assert', []));
-        array_push($errors, ...$assertErrors);
+        if (Auth::can('jobs.assertions')) {
+            [$assertions, $assertErrors] = \App\Services\Assertions::parse($r->input('assert', []));
+            array_push($errors, ...$assertErrors);
+        } else {
+            // No right to change them: keep what the job already has.
+            $assertions = \App\Services\Assertions::decode($existing['assertions'] ?? null);
+        }
         $date = function (string $key) use (&$errors): ?string {
             $v = (string) $this->req->input($key, '');
             if ($v === '') {

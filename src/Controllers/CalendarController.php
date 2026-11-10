@@ -20,7 +20,7 @@ final class CalendarController extends Controller
 
     public function index(): Response
     {
-        $this->authorize('runs.view');
+        $this->authorize('calendar.view');
         $tenant = $this->tenant();
         $tid = (int) $tenant['id'];
         $tz = new DateTimeZone($tenant['timezone'] ?: 'Europe/Athens');

@@ -78,6 +78,9 @@ final class IncidentController extends Controller
     {
         $this->authorize('incidents.ack');
         $job = $this->job($id);
+        if ((int) ($job['acked_by'] ?? 0) !== Auth::id() && !Auth::can('incidents.unack')) {
+            throw new HttpException(403, 'Μπορείς να αναιρέσεις μόνο τη δική σου ανάληψη.');
+        }
         Incidents::unack($job, (string) Auth::user()['name']);
         $this->flash('success', 'Η ανάληψη αναιρέθηκε· οι ειδοποιήσεις συνεχίζουν κανονικά.');
         return $this->back('jobs');

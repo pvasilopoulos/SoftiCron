@@ -59,9 +59,9 @@ if ($hasOld) {
           : 'Κανείς δεν το έχει αναλάβει ακόμα. Πάτα «Το είδα» για να σταματήσουν οι επαναλαμβανόμενες ειδοποιήσεις και η κλιμάκωση.' ?></span>
     </div>
     <?php if (Auth::can('incidents.ack')): ?>
-      <?php if ($job['acked_at']): ?>
+      <?php if ($job['acked_at']): if ((int) $job['acked_by'] === Auth::id() || Auth::can('incidents.unack')): ?>
         <form method="post" action="<?= e(url('jobs/' . $job['id'] . '/unack')) ?>" class="inline"><?= csrf_field() ?><button class="btn btn-sm" type="submit">Αναίρεση</button></form>
-      <?php else: ?>
+      <?php endif; else: ?>
         <form method="post" action="<?= e(url('jobs/' . $job['id'] . '/ack')) ?>" class="inline ib-form" data-loading>
           <?= csrf_field() ?>
           <input class="input" name="note" maxlength="500" placeholder="Σημείωση (προαιρετική)" aria-label="Σημείωση">
@@ -345,13 +345,14 @@ curl -fsS --data-raw "$output" <?= e($pingBase) ?><?= '$( [ $code -ne 0 ] && ech
           return $html . '</div>';
       };
       ?>
-      <div class="assert-box" data-assertions>
+      <?php $canAssert = Auth::can('jobs.assertions'); ?>
+      <fieldset class="assert-box" data-assertions<?= $canAssert ? '' : ' disabled data-readonly' ?> style="margin:0;min-width:0">
         <div class="row between">
           <div class="stack-sm" style="gap:2px">
             <span class="small" style="font-weight:600;color:var(--text)">Έλεγχοι απάντησης <span class="xs muted" style="font-weight:400" data-assert-count><?= $assertRules ? count($assertRules) . ' ενεργοί' : 'προαιρετικοί' ?></span></span>
             <span class="xs muted">Το job αποτυγχάνει αν δεν ισχύει κάποιος, ακόμα κι αν το HTTP status είναι σωστό.</span>
           </div>
-          <button type="button" class="btn btn-sm" data-assert-add><?= icon('plus', 14) ?>Έλεγχος</button>
+          <?php if ($canAssert): ?><button type="button" class="btn btn-sm" data-assert-add><?= icon('plus', 14) ?>Έλεγχος</button><?php else: ?><span class="xs muted" title="Χρειάζεται το δικαίωμα «Έλεγχοι απάντησης»">🔒 Μόνο προβολή</span><?php endif; ?>
         </div>
         <div class="assert-list" data-assert-list>
           <?php foreach ($assertRules as $r) { echo $assertRow($r); } ?>
@@ -366,7 +367,7 @@ curl -fsS --data-raw "$output" <?= e($pingBase) ?><?= '$( [ $code -ne 0 ] && ech
             <li><b>Χρόνος απόκρισης</b> μικρότερο από <code>2000</code> ms</li>
           </ul>
         </details>
-      </div>
+      </fieldset>
     </section>
   </fieldset>
 

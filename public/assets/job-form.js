@@ -181,7 +181,7 @@
     const list = box.querySelector("[data-assert-list]");
     const tpl = box.querySelector("[data-assert-tpl]");
     list.querySelectorAll("[data-assert-row]").forEach(syncRow);
-    box.querySelector("[data-assert-add]").addEventListener("click", () => {
+    box.querySelector("[data-assert-add]")?.addEventListener("click", () => {
       const row = tpl.content.firstElementChild.cloneNode(true);
       list.appendChild(row);
       syncRow(row);
