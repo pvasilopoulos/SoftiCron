@@ -23,6 +23,7 @@ return static function (RouteCollector $r): void {
     $r->get('/jobs/new', [C\JobController::class, 'create']);
     $r->post('/jobs', [C\JobController::class, 'store']);
     $r->post('/jobs/test', [C\JobController::class, 'test']);
+    $r->post('/jobs/bulk', [C\JobController::class, 'bulk']);
     $r->get('/jobs/{id:\d+}/edit', [C\JobController::class, 'edit']);
     $r->post('/jobs/{id:\d+}', [C\JobController::class, 'update']);
     $r->post('/jobs/{id:\d+}/delete', [C\JobController::class, 'delete']);

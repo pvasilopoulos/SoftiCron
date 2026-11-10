@@ -30,10 +30,11 @@ final class JobController extends Controller
         $where = 'FROM jobs j WHERE j.tenant_id = :tid';
         $params = ['tid' => $tid];
         if ($q !== '') {
-            $where .= ' AND (j.name LIKE :q OR j.url LIKE :q2 OR j.group_name LIKE :q3)';
+            $where .= ' AND (j.name LIKE :q OR j.url LIKE :q2 OR j.group_name LIKE :q3 OR j.description LIKE :q4 OR j.cron_expr LIKE :q5)';
             $params['q'] = '%' . $q . '%';
             $params['q2'] = '%' . $q . '%';
             $params['q3'] = '%' . $q . '%';
+            $params['q4'] = $params['q5'] = '%' . $q . '%';
         }
         $group = (string) $this->req->query('group', '');
         if ($group === '__none') {
@@ -46,12 +47,77 @@ final class JobController extends Controller
             'active' => ' AND j.enabled = 1',
             'issue' => " AND j.enabled = 1 AND j.last_status = 'failed'",
             'paused' => ' AND j.enabled = 0',
+            'never' => ' AND j.last_status IS NULL',
+            'slow' => ' AND j.enabled = 1 AND j.slow_threshold_ms IS NOT NULL AND j.last_duration_ms > j.slow_threshold_ms',
             default => '',
         };
-        // Grouped jobs first (alphabetically), ungrouped last.
-        $page = $this->paginate($where, $params, 'j.*', 'j.group_name IS NULL, j.group_name ASC, j.name ASC', 50);
+        $type = (string) $this->req->query('type', '');
+        if (in_array($type, ['http', 'heartbeat'], true)) {
+            $where .= ' AND j.type = :type';
+            $params['type'] = $type;
+        }
+        $method = strtoupper((string) $this->req->query('method', ''));
+        if (in_array($method, self::METHODS, true)) {
+            $where .= " AND j.method = :method AND j.type <> 'heartbeat'";
+            $params['method'] = $method;
+        }
+        $sorts = [
+            'group' => 'j.group_name IS NULL, j.group_name ASC, j.name ASC', // grouped first, ungrouped last
+            'name' => 'j.name ASC',
+            'status' => "CASE WHEN j.enabled = 1 AND j.last_status = 'failed' THEN 0 WHEN j.enabled = 0 THEN 2 ELSE 1 END, j.name ASC",
+            'last_run' => 'j.last_run_at IS NULL, j.last_run_at DESC',
+            'next_run' => 'j.enabled DESC, j.next_run_at IS NULL, j.next_run_at ASC',
+            'duration' => 'j.last_duration_ms IS NULL, j.last_duration_ms DESC',
+            'created' => 'j.id DESC',
+        ];
+        $sort = (string) $this->req->query('sort', 'group');
+        if (!isset($sorts[$sort])) {
+            $sort = 'group';
+        }
+        $per = (int) $this->req->query('per', 50);
+        $per = in_array($per, [25, 50, 100], true) ? $per : 50;
+        $page = $this->paginate($where, $params, 'j.*', $sorts[$sort] . ', j.id ASC', $per);
         $counts = $this->db->one(
-            "SELECT COUNT(*) AS all_count, SUM(enabled = 1) AS active, SUM(enabled = 1 AND last_status = 'failed') AS issue, SUM(enabled = 0) AS paused FROM jobs WHERE tenant_id = ?",
+            "SELECT COUNT(*) AS all_count, SUM(enabled = 1) AS active, SUM(enabled = 1 AND last_status = 'failed') AS issue, SUM(enabled = 0) AS paused,
+                    SUM(last_status IS NULL) AS never, SUM(enabled = 1 AND slow_threshold_ms IS NOT NULL AND last_duration_ms > slow_threshold_ms) AS slow,
+                    SUM(type = 'heartbeat') AS heartbeat
+             FROM jobs WHERE tenant_id = ?",
+            [$tid],
+        );
+
+        // Recent run history + 7-day stats of the jobs on this page.
+        $recent = $stats = [];
+        $ids = array_map('intval', array_column($page['rows'], 'id'));
+        if ($ids) {
+            $in = implode(',', $ids);
+            foreach ($this->db->all(
+                "SELECT job_id, id, status, duration_ms, is_slow, http_status, t FROM (
+                   SELECT job_id, id, status, duration_ms, is_slow, http_status, COALESCE(started_at, scheduled_at) AS t,
+                          ROW_NUMBER() OVER (PARTITION BY job_id ORDER BY id DESC) AS rn
+                   FROM job_runs WHERE job_id IN ($in) AND status IN ('success','failed','missed','skipped','running','retrying')
+                     AND created_at >= UTC_TIMESTAMP() - INTERVAL 30 DAY
+                 ) x WHERE rn <= 20 ORDER BY job_id, id",
+            ) as $r) {
+                $recent[(int) $r['job_id']][] = $r;
+            }
+            foreach ($this->db->all(
+                "SELECT job_id, SUM(status = 'success') AS ok, SUM(status = 'failed') AS failed,
+                        AVG(CASE WHEN status = 'success' THEN duration_ms END) AS avg_ms
+                 FROM job_runs WHERE job_id IN ($in) AND status IN ('success','failed') AND created_at >= UTC_TIMESTAMP() - INTERVAL 7 DAY
+                 GROUP BY job_id",
+            ) as $r) {
+                $stats[(int) $r['job_id']] = $r;
+            }
+        }
+        $kpi = $this->db->one(
+            "SELECT COUNT(*) AS runs, SUM(status = 'success') AS ok, SUM(status = 'failed') AS failed,
+                    AVG(CASE WHEN status = 'success' THEN duration_ms END) AS avg_ms
+             FROM job_runs WHERE tenant_id = ? AND status IN ('success','failed') AND created_at >= UTC_TIMESTAMP() - INTERVAL 1 DAY",
+            [$tid],
+        );
+        $kpi['running'] = (int) $this->db->value("SELECT COUNT(*) FROM job_runs WHERE tenant_id = ? AND status IN ('running','queued','retrying')", [$tid]);
+        $kpi['next'] = $this->db->one(
+            'SELECT id, name, next_run_at FROM jobs WHERE tenant_id = ? AND enabled = 1 AND next_run_at IS NOT NULL ORDER BY next_run_at LIMIT 1',
             [$tid],
         );
         $groupStats = [];
@@ -65,7 +131,98 @@ final class JobController extends Controller
         return $this->view('jobs/index', [
             'title' => 'Jobs', 'nav' => 'jobs', 'page' => $page, 'filter' => $filter, 'q' => $q, 'counts' => $counts,
             'group' => $group, 'groups' => $this->groups(), 'groupStats' => $groupStats,
+            'type' => $type, 'method' => $method, 'sort' => $sort, 'per' => $per, 'recent' => $recent, 'stats' => $stats, 'kpi' => $kpi,
         ]);
+    }
+
+    /** Bulk actions from the jobs list: enable, pause, run, group, delete. */
+    public function bulk(): Response
+    {
+        $action = (string) $this->req->input('action', '');
+        $perm = ['enable' => 'jobs.toggle', 'pause' => 'jobs.toggle', 'run' => 'jobs.run', 'group' => 'jobs.edit', 'delete' => 'jobs.delete'][$action] ?? null;
+        if ($perm === null) {
+            throw new HttpException(422, 'Άγνωστη ενέργεια.');
+        }
+        $this->authorize($perm);
+        $ids = array_values(array_unique(array_filter(array_map('intval', (array) $this->req->input('ids', [])))));
+        $jobs = $ids ? $this->db->all(
+            'SELECT * FROM jobs WHERE tenant_id = ? AND id IN (' . implode(',', $ids) . ')',
+            [$this->tenantId()],
+        ) : [];
+        if (!$jobs) {
+            return $this->bulkDone('Δεν επιλέχθηκαν jobs.', true);
+        }
+        $n = count($jobs);
+        switch ($action) {
+            case 'enable':
+            case 'pause':
+                $on = $action === 'enable' ? 1 : 0;
+                foreach ($jobs as $j) {
+                    if ((int) $j['enabled'] !== $on) {
+                        $this->db->update('jobs', ['enabled' => $on], 'id = :id', ['id' => $j['id']]);
+                        Scheduler::refreshNextRun((int) $j['id']);
+                        Audit::log($on ? 'job.enabled' : 'job.disabled', 'job', (int) $j['id'], $j['name']);
+                    }
+                }
+                return $this->bulkDone($on ? "Ενεργοποιήθηκαν $n jobs." : "Τέθηκαν σε παύση $n jobs.");
+            case 'group':
+                $g = trim((string) $this->req->input('group', ''));
+                $g = $g === '' ? null : mb_substr($g, 0, 100);
+                foreach ($jobs as $j) {
+                    if ($j['group_name'] !== $g) {
+                        $this->db->update('jobs', ['group_name' => $g], 'id = :id', ['id' => $j['id']]);
+                        \App\Services\JobVersions::snapshot((int) $j['id'], $g === null ? 'Αφαίρεση από ομάδα' : 'Μετακίνηση στην ομάδα «' . $g . '»');
+                        Audit::log('job.updated', 'job', (int) $j['id'], $j['name'], ['group_name' => $j['group_name']], ['group_name' => $g]);
+                    }
+                }
+                return $this->bulkDone($g === null ? "Αφαιρέθηκαν $n jobs από την ομάδα τους." : "Μετακινήθηκαν $n jobs στην ομάδα «{$g}».");
+            case 'delete':
+                foreach ($jobs as $j) {
+                    $this->db->exec('DELETE FROM jobs WHERE id = ?', [$j['id']]);
+                    Audit::log('job.deleted', 'job', (int) $j['id'], $j['name'], $this->auditable($j), null);
+                }
+                return $this->bulkDone("Διαγράφηκαν $n jobs.");
+            default: // run
+                $scheduler = new Scheduler();
+                $runIds = [];
+                $skipped = 0;
+                foreach ($jobs as $j) {
+                    if ($j['type'] === 'heartbeat') {
+                        $skipped++;
+                        continue;
+                    }
+                    $runId = $scheduler->enqueue($j, gmdate('Y-m-d H:i:s'), 'manual', Auth::id());
+                    if ($runId) {
+                        $runIds[] = $runId;
+                        Audit::log('job.run_now', 'job', (int) $j['id'], $j['name']);
+                    } else {
+                        $skipped++;
+                    }
+                }
+                // Run up to 20 immediately (in parallel); the rest wait for the scheduler.
+                ignore_user_abort(true);
+                set_time_limit(180);
+                $claimed = array_values(array_filter(array_slice($runIds, 0, 20), fn ($id) => $scheduler->claim($id)));
+                if ($claimed) {
+                    $scheduler->executeClaimed($claimed);
+                }
+                $res = $runIds ? $this->db->one(
+                    "SELECT SUM(status = 'success') AS ok, SUM(status IN ('failed','retrying')) AS failed FROM job_runs WHERE id IN (" . implode(',', $runIds) . ')',
+                ) : ['ok' => 0, 'failed' => 0];
+                $msg = 'Εκτελέστηκαν ' . count($runIds) . ' jobs: ' . (int) $res['ok'] . ' επιτυχίες, ' . (int) $res['failed'] . ' αποτυχίες'
+                    . (count($runIds) > count($claimed) ? ', ' . (count($runIds) - count($claimed)) . ' σε αναμονή' : '')
+                    . ($skipped ? " ($skipped παραλείφθηκαν)" : '') . '.';
+                return $this->bulkDone($msg, (int) $res['failed'] > 0);
+        }
+    }
+
+    private function bulkDone(string $msg, bool $error = false): Response
+    {
+        if ($this->req->wantsJson()) {
+            return $this->json(['message' => $msg, 'error' => $error]);
+        }
+        $this->flash($error ? 'error' : 'success', $msg);
+        return $this->back('jobs');
     }
 
     public function create(): Response

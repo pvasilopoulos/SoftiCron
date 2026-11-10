@@ -156,7 +156,7 @@
       let lastInput = Date.now();
       ['keydown', 'pointerdown', 'scroll'].forEach((ev) => addEventListener(ev, () => { lastInput = Date.now(); }, { passive: true }));
       setInterval(() => {
-        if (document.visibilityState === 'visible' && Date.now() - lastInput > secs * 1000 && !document.querySelector('form :focus')) location.reload();
+        if (document.visibilityState === 'visible' && Date.now() - lastInput > secs * 1000 && !document.querySelector('form :focus') && !document.documentElement.hasAttribute('data-hold-refresh') && !document.querySelector('details.feed-more[open]')) location.reload();
       }, secs * 1000);
     }
 
