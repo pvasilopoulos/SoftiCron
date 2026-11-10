@@ -24,6 +24,7 @@ final class Permissions
         'runs.view' => ['Εκτελέσεις', 'Προβολή εκτελέσεων', 'Λίστα εκτελέσεων, λεπτομέρειες, απάντηση και logs.'],
         'runs.retry' => ['Εκτελέσεις', 'Επανάληψη εκτέλεσης', 'Ξανατρέχει μια ολοκληρωμένη εκτέλεση.'],
         'runs.export' => ['Εκτελέσεις', 'Εξαγωγή εκτελέσεων (CSV)', 'Λήψη εκτελέσεων σε CSV.'],
+        'incidents.ack' => ['Εκτελέσεις', 'Ανάληψη συμβάντος («Το είδα»)', 'Επιβεβαιώνει ότι κάποιος ασχολείται με ένα job που αποτυγχάνει· σταματά την κλιμάκωση και τις επαναλαμβανόμενες ειδοποιήσεις.'],
 
         // Reports
         'reports.view' => ['Αναφορές & SLA', 'Προβολή αναφορών', 'Uptime, SLA, χρόνοι απόκρισης ανά job.'],
@@ -77,7 +78,7 @@ final class Permissions
         'jobs.toggle' => ['jobs.view'], 'jobs.run' => ['jobs.view'], 'jobs.export' => ['jobs.view'],
         'jobs.import' => ['jobs.view', 'jobs.create'], 'jobs.versions' => ['jobs.view'],
         'jobs.restore' => ['jobs.versions', 'jobs.edit'],
-        'runs.retry' => ['runs.view', 'jobs.run'], 'runs.export' => ['runs.view'],
+        'runs.retry' => ['runs.view', 'jobs.run'], 'runs.export' => ['runs.view'], 'incidents.ack' => ['jobs.view'],
         'reports.export' => ['reports.view'], 'reports.email' => ['reports.view'],
         'connectors.manage' => ['connectors.view'], 'connectors.test' => ['connectors.view'],
         'templates.manage' => ['templates.view'], 'templates.test' => ['templates.view'],

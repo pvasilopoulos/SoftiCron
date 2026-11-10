@@ -51,6 +51,7 @@ final class JobIO
             $auth[$key] = $secret ? null : ($cfg[$key] ?? '');
         }
         $out['auth'] = $auth;
+        $out['assertions'] = Assertions::decode($job['assertions'] ?? null);
         $out['escalate_channels'] = $job['escalate_channels'] ? explode(',', (string) $job['escalate_channels']) : [];
         $notify = [];
         if (!empty($job['id'])) {
@@ -111,6 +112,7 @@ final class JobIO
         foreach (JobAuth::FIELDS[$in['auth_type']] ?? [] as $key => $def) {
             $in['auth'][$key] = (string) ($auth[$key] ?? '');
         }
+        $in['assert'] = array_values(array_filter((array) ($d['assertions'] ?? []), 'is_array'));
         $in['escalate_channels'] = array_values(array_map('strval', (array) ($d['escalate_channels'] ?? [])));
         $in['notify'] = [];
         foreach ((array) ($d['notify'] ?? []) as $event => $channels) {

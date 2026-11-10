@@ -13,6 +13,7 @@ $canToggle = Auth::can('jobs.toggle');
 $canDelete = Auth::can('jobs.delete');
 $canRun = Auth::can('jobs.run');
 $canExport = Auth::can('jobs.export');
+$canAck = Auth::can('incidents.ack');
 $canBulk = $canToggle || $canRun || $canEdit || $canDelete || $canExport;
 
 // Current query, used to build links that change one parameter.
@@ -227,6 +228,13 @@ $fmtPct = fn (?float $p) => $p === null ? '—' : ($p >= 99.95 || $p == 0 ? numb
                   <?= status_badge($j['last_status']) ?>
                 <?php endif; ?>
                 <span class="xs muted" title="<?= e(fmt_dt($j['last_run_at'], $tz, 'd/m/Y H:i:s')) ?>"><?= e(rel_time($j['last_run_at'])) ?><?= $j['last_duration_ms'] !== null ? ' · ' . e(fmt_ms((int) $j['last_duration_ms'])) : '' ?></span>
+                <?php if ($failing && $j['failing_since']): ?>
+                  <?php if ($j['acked_at']): ?>
+                    <span class="ack-chip" title="<?= e('Ανέλαβε ' . rel_time($j['acked_at']) . ($j['ack_note'] ? ' · ' . $j['ack_note'] : '')) ?>">✋ <?= e($j['acked_name']) ?></span>
+                  <?php elseif ($canAck): ?>
+                    <form method="post" action="<?= e(url('jobs/' . $jid . '/ack')) ?>" class="inline" data-loading><?= csrf_field() ?><button class="ack-btn" type="submit" title="Αναλαμβάνω: σταματούν οι επαναλαμβανόμενες ειδοποιήσεις και η κλιμάκωση">✋ Το είδα</button></form>
+                  <?php endif; ?>
+                <?php endif; ?>
               </div>
             </td>
             <td data-label="Ιστορικό">

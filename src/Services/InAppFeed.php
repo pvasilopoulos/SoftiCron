@@ -14,7 +14,7 @@ final class InAppFeed
 {
     public const LEVELS = [
         'failed' => 'error', 'escalated' => 'error', 'missed' => 'warning', 'slow' => 'warning',
-        'recovered' => 'success', 'succeeded' => 'success',
+        'recovered' => 'success', 'succeeded' => 'success', 'acked' => 'info',
     ];
 
     public const KEEP_DAYS = 90;
@@ -30,7 +30,7 @@ final class InAppFeed
                     return;
                 }
             }
-            $users = self::recipients((int) $tenant['id'], $event === 'escalated' ? 'failed' : $event);
+            $users = self::recipients((int) $tenant['id'], in_array($event, ['escalated', 'acked'], true) ? 'failed' : $event);
             if (!$users) {
                 return;
             }
@@ -79,6 +79,7 @@ final class InAppFeed
             'missed' => "Χαμένη εκτέλεση: $name",
             'slow' => "Αργή απόκριση: $name",
             'succeeded' => "Επιτυχία: $name",
+            'acked' => "Ανάληψη: $name",
             default => Notifier::eventLabel($event) . ": $name",
         };
         $parts = array_filter([$extra, $http, $dur, $event === 'failed' || $event === 'escalated' || $event === 'missed' ? $err : null]);

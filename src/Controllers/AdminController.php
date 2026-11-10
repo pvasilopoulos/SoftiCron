@@ -172,6 +172,39 @@ final class AdminController extends Controller
             ['storage/ εγγράψιμο', is_writable(\App\Core\App::storage()) ? 'Ναι' : 'Όχι', is_writable(\App\Core\App::storage())],
         ];
         $queue = $this->db->one("SELECT SUM(status='queued') AS queued, SUM(status='running') AS running, SUM(status='retrying') AS retrying FROM job_runs WHERE status IN ('queued','running','retrying')");
-        return $this->view('admin/system', ['title' => 'Κατάσταση συστήματος', 'nav' => 'system', 'checks' => $checks, 'queue' => $queue], Auth::tenant() ? 'layout' : 'auth_layout');
+        $watch = \App\Services\Watchdog::status() + [
+            'ping_url' => (string) Settings::get(0, 'watchdog.ping_url', ''),
+            'ping_last' => (string) Settings::get(0, 'watchdog.ping_last', ''),
+            'alert_at' => (string) Settings::get(0, 'watchdog.alert_at', ''),
+        ];
+        return $this->view('admin/system', ['title' => 'Κατάσταση συστήματος', 'nav' => 'system', 'checks' => $checks, 'queue' => $queue, 'watch' => $watch], Auth::tenant() ? 'layout' : 'auth_layout');
+    }
+
+    public function watchdogSave(): Response
+    {
+        $this->superAdmin();
+        $url = trim((string) $this->req->input('ping_url', ''));
+        if ($url !== '' && !preg_match('#^https?://#i', $url)) {
+            $this->flash('error', 'Το URL πρέπει να ξεκινά με https:// (ή http://).');
+            return $this->redirect('admin/system');
+        }
+        $before = (string) Settings::get(0, 'watchdog.ping_url', '');
+        Settings::set(0, 'watchdog.ping_url', mb_substr($url, 0, 500));
+        if ($url !== $before) {
+            Settings::set(0, 'watchdog.ping_last', '');
+        }
+        Audit::log('system.watchdog', 'system', null, $url !== '' ? 'Ping URL: ' . parse_url($url, PHP_URL_HOST) : 'Ping URL αφαιρέθηκε', tenantId: null);
+        $this->flash('success', $url !== '' ? 'Αποθηκεύτηκε. Ο scheduler θα το καλεί σε κάθε εκτέλεση (κάθε λεπτό).' : 'Το ping URL αφαιρέθηκε.');
+        return $this->redirect('admin/system');
+    }
+
+    public function watchdogTest(): Response
+    {
+        $this->superAdmin();
+        \App\Services\Watchdog::pingOut();
+        \App\Services\Watchdog::alertAdmins('🔔 Δοκιμή επιτήρησης scheduler', 'Αυτή είναι δοκιμαστική ειδοποίηση. Έτσι θα ειδοποιηθείς αν σταματήσει το bin/cron.php.', 'info');
+        $last = (string) Settings::get(0, 'watchdog.ping_last', '');
+        $this->flash('success', 'Στάλθηκε δοκιμαστική ειδοποίηση στους super admins (push, email, εφαρμογή).' . ($last !== '' ? ' Ping: ' . explode('|', $last, 2)[1] : ''));
+        return $this->redirect('admin/system');
     }
 }

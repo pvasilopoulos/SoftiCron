@@ -152,6 +152,51 @@
     sync();
   }
 
+  // ---- Response assertions ----
+  const box = document.querySelector("[data-assertions]");
+  function renumberAsserts() {
+    if (!box) return;
+    const rows = box.querySelectorAll("[data-assert-list] [data-assert-row]");
+    rows.forEach((row, i) => row.querySelectorAll("[data-a]").forEach((el) => { el.name = "assert[" + i + "][" + el.dataset.a + "]"; }));
+    const n = rows.length;
+    box.querySelector("[data-assert-count]").textContent = n ? n + (n === 1 ? " ενεργός" : " ενεργοί") : "προαιρετικοί";
+  }
+  function syncRow(row) {
+    const type = row.querySelector("[data-a=type]");
+    const op = row.querySelector("[data-a=op]");
+    const target = row.querySelector("[data-a=target]");
+    const value = row.querySelector("[data-a=value]");
+    const allowed = JSON.parse(op.dataset.ops)[type.value] || [];
+    Array.from(op.options).forEach((o) => { o.hidden = !allowed.includes(o.value); o.disabled = o.hidden; });
+    if (!allowed.includes(op.value)) op.value = allowed[0];
+    const ph = type.selectedOptions[0].dataset.ph;
+    target.hidden = !ph;
+    target.placeholder = ph || "";
+    const noVal = ["exists", "not_exists", "empty", "not_empty"].includes(op.value);
+    value.hidden = noVal;
+    value.placeholder = type.value === "time" ? "ms, π.χ. 2000" : type.value === "size" ? "bytes" : (op.value.includes("matches") ? "regex" : "τιμή");
+    row.classList.toggle("no-target", !ph);
+  }
+  if (box) {
+    const list = box.querySelector("[data-assert-list]");
+    const tpl = box.querySelector("[data-assert-tpl]");
+    list.querySelectorAll("[data-assert-row]").forEach(syncRow);
+    box.querySelector("[data-assert-add]").addEventListener("click", () => {
+      const row = tpl.content.firstElementChild.cloneNode(true);
+      list.appendChild(row);
+      syncRow(row);
+      renumberAsserts();
+      row.querySelector("[data-a=target]").focus();
+    });
+    list.addEventListener("change", (e) => { const row = e.target.closest("[data-assert-row]"); if (row) syncRow(row); renumberAsserts(); });
+    list.addEventListener("click", (e) => {
+      const del = e.target.closest("[data-assert-del]");
+      if (del) { del.closest("[data-assert-row]").remove(); renumberAsserts(); form.dispatchEvent(new Event("change")); }
+    });
+    form.addEventListener("submit", renumberAsserts);
+    renumberAsserts();
+  }
+
   // ---- Test run ----
   const card = document.getElementById('test-run');
   const result = card?.querySelector('[data-test-result]');
@@ -163,6 +208,7 @@
     result.innerHTML = '<div class="row small"><span class="badge run"><span class="dot"></span>Εκτελείται</span>Αποστολή request…</div>';
     document.querySelectorAll('[data-test-run]').forEach((b) => b.classList.add('loading'));
     try {
+      renumberAsserts();
       const fd = new FormData(form);
       const res = await fetch(window.APP.base.replace(/\/$/, '') + '/jobs/test', { method: 'POST', body: fd, headers: { Accept: 'application/json', 'X-Requested-With': 'fetch', 'X-CSRF-Token': window.APP.csrf }, credentials: 'same-origin' });
       const d = await res.json();
@@ -173,6 +219,7 @@
         result.innerHTML = `
           <div class="row">${badge}<span class="small muted">${esc(d.duration)} · ${esc(d.size)}</span></div>
           ${d.ok ? '' : `<p class="small" style="color:var(--fail-fg)">${esc(d.reason || '')}</p>`}
+          ${(d.checks || []).length ? `<ul class="assert-results">${d.checks.map((c) => `<li class="${c.ok ? 'ok' : 'bad'}"><span aria-hidden="true">${c.ok ? '✓' : '✗'}</span><span>${esc(c.label)}<small>βρέθηκε: ${esc(c.actual)}</small></span></li>`).join('')}</ul>` : ''}
           <p class="xs muted mono" style="word-break:break-all">${esc(d.request.method)} ${esc(d.request.url)}</p>
           ${d.body ? `<pre class="code" style="max-height:320px">${esc(d.body)}</pre>` : '<p class="small muted">Κενό response.</p>'}
           ${d.headers ? `<details><summary class="small">Response headers</summary><pre class="code" style="margin-top:8px">${esc(d.headers)}</pre></details>` : ''}`;

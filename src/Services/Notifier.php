@@ -162,6 +162,7 @@ final class Notifier
             ] : [],
             'tenant' => ['id' => (int) $tenant['id'], 'name' => $tenant['name'], 'slug' => $tenant['slug']],
             'app' => ['name' => App::name(), 'url' => abs_url('')],
+            'ack' => ['link' => in_array($event, ['failed', 'escalated'], true) ? (string) Incidents::ackUrl((int) $job['id']) : ''],
         ];
     }
 
@@ -172,6 +173,13 @@ final class Notifier
         InAppFeed::record($event, $job, $run, $tenant);
         $rules = $db->all('SELECT * FROM job_notifications WHERE job_id = ? AND event = ?', [$job['id'], $event]);
         if (!$rules) {
+            return;
+        }
+        // Someone already took ownership ("Το είδα"): no more failure alerts until it recovers.
+        if ($event === 'failed' && Incidents::isAcked($job)) {
+            foreach ($rules as $rule) {
+                self::log($tenant, $job, $run, $event, $rule['channel'], '—', 'skipped', 'Το συμβάν έχει αναληφθεί από ' . ($job['acked_name'] ?: 'κάποιον') . '.');
+            }
             return;
         }
         // Throttle repeated failure alerts.
@@ -252,7 +260,7 @@ final class Notifier
     /** Label for events in logs (includes internal events such as escalation). */
     public static function eventLabel(string $event): string
     {
-        return self::EVENTS[$event] ?? ['escalated' => 'Κλιμάκωση', 'heartbeat' => 'Heartbeat'][$event] ?? $event;
+        return self::EVENTS[$event] ?? ['escalated' => 'Κλιμάκωση', 'heartbeat' => 'Heartbeat', 'acked' => 'Ανάληψη συμβάντος'][$event] ?? $event;
     }
 
     /** @return array{0:string,1:string} */
@@ -288,7 +296,7 @@ final class Notifier
                 throw new \RuntimeException('Δεν έχουν οριστεί παραλήπτες email.');
             }
             self::$lastTarget = implode(', ', $to);
-            $html = self::emailHtml($tenant, $subject, $body, $ctx['run']['link'] ?? null, $event);
+            $html = self::emailHtml($tenant, $subject, $body, $ctx['run']['link'] ?? null, $event, ($ctx['ack']['link'] ?? '') ?: null);
             EmailSender::send($conn['type'], Connectors::config($conn), $to, $subject, $html, $body);
             return [implode(', ', $to)];
         }
@@ -300,7 +308,10 @@ final class Notifier
             $cfg = Connectors::config($conn);
             $chat = (string) ($job['notify_telegram_chat'] ?: ($cfg['default_chat_id'] ?? '') ?: Settings::get($tid, 'notify.telegram_chat', ''));
             self::$lastTarget = 'chat ' . $chat . ' · ' . $conn['name'];
-            TelegramSender::send($cfg, $chat, TelegramSender::format($body));
+            TelegramSender::send($cfg, $chat, TelegramSender::format($body), array_values(array_filter([
+                !empty($ctx['ack']['link']) ? ['✋ Το είδα', $ctx['ack']['link']] : null,
+                !empty($ctx['run']['link']) ? ['Άνοιγμα', $ctx['run']['link']] : null,
+            ])));
             return [self::$lastTarget];
         }
         if ($channel === 'push') {
@@ -315,6 +326,7 @@ final class Notifier
                 'tag' => 'job-' . $job['id'] . '-' . $event,
                 'icon' => abs_url('assets/icons/icon-192.png'),
                 'badge' => abs_url('assets/icons/badge-72.png'),
+                'ack_url' => ($ctx['ack']['link'] ?? '') ?: null,
             ]);
             self::$lastTarget = self::deviceNames($subs);
             if ($res['sent'] === 0 && $res['failed'] > 0) {
@@ -520,7 +532,7 @@ final class Notifier
     }
 
     /** Branded HTML email wrapper around plain-text template output. */
-    public static function emailHtml(array $tenant, string $title, string $text, ?string $link, ?string $event): string
+    public static function emailHtml(array $tenant, string $title, string $text, ?string $link, ?string $event, ?string $ackLink = null): string
     {
         $color = preg_match('/^#[0-9A-Fa-f]{6}$/', (string) $tenant['brand_color']) ? $tenant['brand_color'] : '#4F46E5';
         $logo = $tenant['logo_path'] ? '<img src="' . e(abs_url('branding/' . $tenant['id'] . '/logo')) . '" alt="" height="36" style="display:block;max-height:36px">' : '<div style="width:36px;height:36px;border-radius:9px;background:' . $color . ';color:#fff;font:700 14px/36px Arial,sans-serif;text-align:center">' . e(initials($tenant['name'])) . '</div>';
@@ -530,7 +542,8 @@ final class Notifier
             'slow', 'missed' => '#D97706',
             default => $color,
         };
-        $button = $link ? '<p style="margin:24px 0 0"><a href="' . e($link) . '" style="display:inline-block;padding:12px 20px;border-radius:10px;background:' . $color . ';color:#fff;text-decoration:none;font-weight:600">Προβολή στο ' . e(App::name()) . '</a></p>' : '';
+        $button = $link ? '<p style="margin:24px 0 0"><a href="' . e($link) . '" style="display:inline-block;padding:12px 20px;border-radius:10px;background:' . $color . ';color:#fff;text-decoration:none;font-weight:600">Προβολή στο ' . e(App::name()) . '</a>'
+            . ($ackLink ? ' &nbsp; <a href="' . e($ackLink) . '" style="display:inline-block;padding:11px 18px;border-radius:10px;border:1px solid #CBD5E1;color:#0F172A;text-decoration:none;font-weight:600">✋ Το είδα</a>' : '') . '</p>' : '';
         return '<!doctype html><html lang="el"><body style="margin:0;background:#F6F7F9;font-family:Segoe UI,Arial,sans-serif;color:#0F172A">'
             . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:24px 12px">'
             . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#fff;border:1px solid #E5E7EB;border-radius:14px">'

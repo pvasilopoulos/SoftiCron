@@ -8,7 +8,7 @@ $fieldLabels = [
     'headers' => 'Headers', 'auth' => 'Αυθεντικοποίηση', 'body_type' => 'Τύπος body', 'body' => 'Body', 'cron' => 'Πρόγραμμα (cron)',
     'timezone' => 'Ζώνη ώρας', 'timeout_sec' => 'Timeout', 'max_retries' => 'Επαναλήψεις', 'retry_strategy' => 'Στρατηγική retry',
     'retry_delay_sec' => 'Καθυστέρηση retry', 'overlap_policy' => 'Επικάλυψη', 'success_codes' => 'HTTP επιτυχίας',
-    'success_contains' => 'Η απάντηση περιέχει', 'slow_threshold_ms' => 'Όριο αργής απόκρισης', 'active_from' => 'Ενεργό από',
+    'success_contains' => 'Η απάντηση περιέχει', 'assertions' => 'Έλεγχοι απάντησης', 'slow_threshold_ms' => 'Όριο αργής απόκρισης', 'active_from' => 'Ενεργό από',
     'active_until' => 'Ενεργό έως', 'notify' => 'Ειδοποιήσεις', 'notify_emails' => 'Emails', 'notify_phones' => 'Κινητά',
     'notify_telegram_chat' => 'Telegram chat', 'grace_minutes' => 'Περιθώριο heartbeat', 'notify_after_failures' => 'Ειδοποίηση μετά από',
     'escalate_after_minutes' => 'Κλιμάκωση μετά από', 'escalate_channels' => 'Κανάλια κλιμάκωσης', 'sla_target' => 'Στόχος SLA',

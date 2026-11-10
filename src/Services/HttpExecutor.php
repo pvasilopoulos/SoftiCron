@@ -238,17 +238,34 @@ final class HttpExecutor
     /** Is the response a success according to the job rules? Returns [bool, reason]. */
     public static function evaluate(array $job, array $result): array
     {
+        [$ok, $reason] = self::evaluateFull($job, $result);
+        return [$ok, $reason];
+    }
+
+    /**
+     * Like evaluate() plus the per-assertion results.
+     * @return array{0: bool, 1: ?string, 2: array}
+     */
+    public static function evaluateFull(array $job, array $result): array
+    {
         if (!$result['ok'] || $result['http_status'] === null) {
-            return [false, $result['error'] ?? 'Καμία απάντηση.'];
+            return [false, $result['error'] ?? 'Καμία απάντηση.', []];
         }
+        $rules = is_array($job['assertions'] ?? null) ? $job['assertions'] : Assertions::decode($job['assertions'] ?? null);
+        [, , $checks] = Assertions::check($rules, $result);
         if (!self::statusMatches((int) $result['http_status'], (string) ($job['success_codes'] ?: '200-299'))) {
-            return [false, 'Μη αναμενόμενο HTTP status ' . $result['http_status'] . '.'];
+            return [false, 'Μη αναμενόμενο HTTP status ' . $result['http_status'] . '.', $checks];
         }
         $needle = (string) ($job['success_contains'] ?? '');
         if ($needle !== '' && !str_contains($result['body'], $needle)) {
-            return [false, 'Το response δεν περιέχει το κείμενο «' . $needle . '».'];
+            return [false, 'Το response δεν περιέχει το κείμενο «' . $needle . '».', $checks];
         }
-        return [true, null];
+        foreach ($checks as $c) {
+            if (!$c['ok']) {
+                return [false, 'Απέτυχε ο έλεγχος: ' . $c['label'] . ' (βρέθηκε: ' . $c['actual'] . ').', $checks];
+            }
+        }
+        return [true, null, $checks];
     }
 
     public static function statusMatches(int $code, string $spec): bool

@@ -13,7 +13,8 @@ self.addEventListener('push', (event) => {
       badge: data.badge || '/assets/icons/badge-72.png',
       tag: data.tag || undefined,
       renotify: !!data.tag,
-      data: { url: data.url || '/' },
+      data: { url: data.url || '/', ackUrl: data.ack_url || null },
+      actions: data.ack_url ? [{ action: 'ack', title: '✋ Το είδα' }, { action: 'open', title: 'Άνοιγμα' }] : [],
     }),
     // Open tabs refresh the bell (notification center) right away.
     self.clients.matchAll({ type: 'window', includeUncontrolled: true })
@@ -23,7 +24,8 @@ self.addEventListener('push', (event) => {
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const url = (event.notification.data && event.notification.data.url) || '/';
+  const d = event.notification.data || {};
+  const url = (event.action === 'ack' && d.ackUrl) ? d.ackUrl : (d.url || '/');
   event.waitUntil((async () => {
     const all = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
     for (const c of all) {

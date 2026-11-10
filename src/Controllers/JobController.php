@@ -419,6 +419,8 @@ final class JobController extends Controller
         if (!preg_match('/^(\d{3}(-\d{3})?|\dxx)(,(\d{3}(-\d{3})?|\dxx))*$/i', $codes)) {
             $errors[] = 'Τα HTTP status επιτυχίας πρέπει να είναι π.χ. 200-299,304 ή 2xx.';
         }
+        [$assertions, $assertErrors] = \App\Services\Assertions::parse($r->input('assert', []));
+        array_push($errors, ...$assertErrors);
         $date = function (string $key) use (&$errors): ?string {
             $v = (string) $this->req->input($key, '');
             if ($v === '') {
@@ -506,6 +508,7 @@ final class JobController extends Controller
             'overlap_policy' => in_array($r->input('overlap_policy'), ['skip', 'queue', 'allow'], true) ? $r->input('overlap_policy') : 'skip',
             'success_codes' => $codes,
             'success_contains' => mb_substr((string) $r->input('success_contains', ''), 0, 255) ?: null,
+            'assertions' => $assertions ? json_encode($assertions, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : null,
             'slow_threshold_ms' => (int) $r->input('slow_threshold_ms', 0) > 0 ? (int) $r->input('slow_threshold_ms') : null,
             'active_from' => $from,
             'active_until' => $until,
@@ -746,7 +749,7 @@ final class JobController extends Controller
             return $this->json(['ok' => false, 'error' => $e->getMessage()], 422);
         }
         $res = HttpExecutor::execute($req);
-        [$ok, $reason] = HttpExecutor::evaluate($job, $res);
+        [$ok, $reason, $checks] = HttpExecutor::evaluateFull($job, $res);
         $pretty = $res['body'];
         $decoded = json_decode($res['body'], true);
         if ($decoded !== null && is_array($decoded)) {
@@ -761,6 +764,7 @@ final class JobController extends Controller
             'request' => ['method' => $req['method'], 'url' => $req['url'], 'body' => $req['body']],
             'headers' => $res['headers'],
             'body' => mb_substr($pretty, 0, 20000),
+            'checks' => $checks,
         ]);
     }
 

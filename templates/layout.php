@@ -11,6 +11,7 @@ $items = [
     ['dashboard', '/', 'Επισκόπηση', 'dashboard', null],
     ['jobs', 'jobs', 'Jobs', 'jobs', 'jobs.view'],
     ['runs', 'runs', 'Εκτελέσεις', 'runs', 'runs.view'],
+    ['calendar', 'calendar', 'Ημερολόγιο', 'calendar', 'runs.view'],
     ['reports', 'reports', 'Αναφορές & SLA', 'dashboard', 'reports.view'],
     ['templates', 'templates', 'Templates μηνυμάτων', 'templates', 'templates.view'],
     ['connectors', 'connectors', 'Connectors', 'connectors', 'connectors.view'],
@@ -27,6 +28,7 @@ $admin = [
     ['settings', 'settings', 'Ρυθμίσεις', 'settings', \App\Controllers\SettingsController::SETTINGS_PERMS],
 ];
 $tenants = Auth::tenants();
+App\Services\Watchdog::checkFromWeb();
 $feedUnread = $tenant ? App\Services\InAppFeed::unread((int) Auth::id(), (int) $tenant['id']) : 0;
 $logoUrl = $tenant && $tenant['logo_path'] ? url('branding/' . $tenant['id'] . '/logo') . '?v=' . rawurlencode((string) $tenant['logo_path']) : null;
 // Short labels for the tablet icon rail.

@@ -72,12 +72,14 @@ final class Connectors
         ],
         'slack' => [
             'webhook_url' => ['Incoming Webhook URL', 'password', true, true, 'https://hooks.slack.com/services/…'],
+            'mention' => ['Αναφορά σε αποτυχία (προαιρετικό)', 'text', false, false, 'Μπαίνει στις αποτυχίες και στις κλιμακώσεις, π.χ. <!channel>, <!here> ή <@U012AB3CD> για συγκεκριμένο χρήστη'],
         ],
         'teams' => [
             'webhook_url' => ['Workflows webhook URL', 'password', true, true, 'Teams → κανάλι → ⋯ → Workflows → «Post to a channel when a webhook request is received»'],
         ],
         'discord' => [
             'webhook_url' => ['Webhook URL', 'password', true, true, 'Server settings → Integrations → Webhooks → New Webhook → Copy URL'],
+            'mention' => ['Αναφορά σε αποτυχία (προαιρετικό)', 'text', false, false, 'Μπαίνει στις αποτυχίες και στις κλιμακώσεις, π.χ. @here, @everyone ή <@&ID ρόλου>'],
         ],
         'webhook' => [
             'url' => ['URL', 'url', true, false, 'Δέχεται POST με JSON (event, title, message, job, run, tenant)'],
@@ -156,7 +158,7 @@ final class Connectors
             return;
         }
         if (in_array($connector['type'], ['slack', 'teams', 'discord', 'webhook'], true)) {
-            $ctx = ['tenant' => ['id' => (int) $tenant['id'], 'name' => $tenant['name'], 'slug' => $tenant['slug']], 'app' => ['url' => abs_url('')], 'run' => ['link' => abs_url('connectors')]];
+            $ctx = ['tenant' => ['id' => (int) $tenant['id'], 'name' => $tenant['name'], 'slug' => $tenant['slug']], 'app' => ['url' => abs_url('')], 'run' => ['link' => abs_url('connectors')], 'job' => ['name' => 'Παράδειγμα job']];
             \App\Services\Channels\ChatSender::send($connector['type'], $cfg, '✅ ' . $title, $text, $ctx, 'test');
             return;
         }

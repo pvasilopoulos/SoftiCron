@@ -49,6 +49,29 @@ if ($hasOld) {
   </div>
 </div>
 
+<?php if (!$isNew && $job['enabled'] && $job['last_status'] === 'failed' && !empty($job['failing_since'])): ?>
+  <div class="incident-bar<?= $job['acked_at'] ? ' acked' : '' ?>" role="status">
+    <span class="ib-ic" aria-hidden="true"><?= $job['acked_at'] ? '✋' : '!' ?></span>
+    <div class="grow stack-sm" style="gap:2px;min-width:0">
+      <strong>Αποτυγχάνει <?= e(rel_time($job['failing_since'])) ?></strong>
+      <span class="small"><?= $job['acked_at']
+          ? 'Το ανέλαβε ο/η ' . e($job['acked_name']) . ' ' . e(rel_time($job['acked_at'])) . ($job['ack_note'] ? ' · «' . e($job['ack_note']) . '»' : '') . '. Οι επαναλαμβανόμενες ειδοποιήσεις και η κλιμάκωση έχουν σταματήσει.'
+          : 'Κανείς δεν το έχει αναλάβει ακόμα. Πάτα «Το είδα» για να σταματήσουν οι επαναλαμβανόμενες ειδοποιήσεις και η κλιμάκωση.' ?></span>
+    </div>
+    <?php if (Auth::can('incidents.ack')): ?>
+      <?php if ($job['acked_at']): ?>
+        <form method="post" action="<?= e(url('jobs/' . $job['id'] . '/unack')) ?>" class="inline"><?= csrf_field() ?><button class="btn btn-sm" type="submit">Αναίρεση</button></form>
+      <?php else: ?>
+        <form method="post" action="<?= e(url('jobs/' . $job['id'] . '/ack')) ?>" class="inline ib-form" data-loading>
+          <?= csrf_field() ?>
+          <input class="input" name="note" maxlength="500" placeholder="Σημείωση (προαιρετική)" aria-label="Σημείωση">
+          <button class="btn btn-primary btn-sm" type="submit">✋ Το είδα</button>
+        </form>
+      <?php endif; ?>
+    <?php endif; ?>
+  </div>
+<?php endif; ?>
+
 <?php if (!$isNew): ?>
   <nav class="tabs" aria-label="Ενότητες job">
     <a class="on" href="<?= e(url('jobs/' . $job['id'] . '/edit')) ?>" aria-current="page">Ρυθμίσεις</a>
@@ -298,6 +321,51 @@ curl -fsS --data-raw "$output" <?= e($pingBase) ?><?= '$( [ $code -ne 0 ] && ech
         <label class="field">…και το response περιέχει <span class="help">Προαιρετικό</span>
           <input class="input mono" name="success_contains" value="<?= e($v('success_contains')) ?>" placeholder='"status":"ok"'>
         </label>
+      </div>
+      <?php
+      $assertRules = $hasOld ? array_values(array_filter((array) old('assert', []), 'is_array')) : \App\Services\Assertions::decode($job['assertions'] ?? null);
+      $A = \App\Services\Assertions::class;
+      $assertRow = function (array $r) use ($A): string {
+          $type = $r['type'] ?? 'json';
+          $opsJson = e((string) json_encode(array_map(fn ($t) => $t[2], $A::TYPES)));
+          $html = '<div class="assert-row" data-assert-row>';
+          $html .= '<select class="select" data-a="type" aria-label="Τι ελέγχεται">';
+          foreach ($A::TYPES as $k => [$label, $ph]) {
+              $html .= '<option value="' . $k . '" data-ph="' . e((string) $ph) . '"' . ($type === $k ? ' selected' : '') . '>' . e($label) . '</option>';
+          }
+          $html .= '</select>';
+          $html .= '<input class="input mono" data-a="target" value="' . e($r['target'] ?? '') . '" placeholder="' . e((string) ($A::TYPES[$type][1] ?? '')) . '" aria-label="Πεδίο ή header">';
+          $html .= '<select class="select" data-a="op" data-ops="' . $opsJson . '" aria-label="Σύγκριση">';
+          foreach ($A::OPS as $k => $label) {
+              $html .= '<option value="' . $k . '"' . (($r['op'] ?? '') === $k ? ' selected' : '') . '>' . e($label) . '</option>';
+          }
+          $html .= '</select>';
+          $html .= '<input class="input mono" data-a="value" value="' . e($r['value'] ?? '') . '" placeholder="τιμή" aria-label="Τιμή">';
+          $html .= '<button type="button" class="btn btn-icon btn-ghost btn-sm" data-assert-del aria-label="Αφαίρεση ελέγχου" title="Αφαίρεση">' . icon('x', 14) . '</button>';
+          return $html . '</div>';
+      };
+      ?>
+      <div class="assert-box" data-assertions>
+        <div class="row between">
+          <div class="stack-sm" style="gap:2px">
+            <span class="small" style="font-weight:600;color:var(--text)">Έλεγχοι απάντησης <span class="xs muted" style="font-weight:400" data-assert-count><?= $assertRules ? count($assertRules) . ' ενεργοί' : 'προαιρετικοί' ?></span></span>
+            <span class="xs muted">Το job αποτυγχάνει αν δεν ισχύει κάποιος, ακόμα κι αν το HTTP status είναι σωστό.</span>
+          </div>
+          <button type="button" class="btn btn-sm" data-assert-add><?= icon('plus', 14) ?>Έλεγχος</button>
+        </div>
+        <div class="assert-list" data-assert-list>
+          <?php foreach ($assertRules as $r) { echo $assertRow($r); } ?>
+        </div>
+        <template data-assert-tpl><?= $assertRow(['type' => 'json', 'op' => 'eq']) ?></template>
+        <details class="xs muted assert-help">
+          <summary>Παραδείγματα</summary>
+          <ul>
+            <li><b>Πεδίο JSON</b> <code>$.status</code> ισούται με <code>ok</code> · <code>$.data.items.length</code> μεγαλύτερο από <code>0</code> · <code>$.errors</code> είναι κενό · <code>$.user.active</code> ισούται με <code>true</code></li>
+            <li><b>Header</b> <code>Content-Type</code> περιέχει <code>application/json</code></li>
+            <li><b>Κείμενο απάντησης</b> δεν περιέχει <code>Fatal error</code> · regex <code>order #\d+</code></li>
+            <li><b>Χρόνος απόκρισης</b> μικρότερο από <code>2000</code> ms</li>
+          </ul>
+        </details>
       </div>
     </section>
   </fieldset>

@@ -33,7 +33,14 @@ return static function (RouteCollector $r): void {
     $r->post('/jobs/{id:\d+}/duplicate', [C\JobController::class, 'duplicate']);
     $r->get('/api/cron/preview', [C\JobController::class, 'cronPreview']);
 
+    // Incidents: "Το είδα"
+    $r->post('/jobs/{id:\d+}/ack', [C\IncidentController::class, 'ack']);
+    $r->post('/jobs/{id:\d+}/unack', [C\IncidentController::class, 'unack']);
+    $r->get('/ack/{id:\d+}/{token:[a-f0-9]{32}}', [C\IncidentController::class, 'linkForm']);
+    $r->post('/ack/{id:\d+}/{token:[a-f0-9]{32}}', [C\IncidentController::class, 'linkAck']);
+
     // Runs
+    $r->get('/calendar', [C\CalendarController::class, 'index']);
     $r->get('/runs', [C\RunController::class, 'index']);
     $r->get('/runs/export', [C\RunController::class, 'export']);
     $r->get('/runs/{id:\d+}', [C\RunController::class, 'show']);
@@ -137,6 +144,9 @@ return static function (RouteCollector $r): void {
     $r->post('/admin/tenants/{id:\d+}', [C\AdminController::class, 'updateTenant']);
     $r->post('/admin/tenants/{id:\d+}/enter', [C\AdminController::class, 'enterTenant']);
     $r->get('/admin/system', [C\AdminController::class, 'system']);
+    $r->post('/admin/system/watchdog', [C\AdminController::class, 'watchdogSave']);
+    $r->post('/admin/system/watchdog/test', [C\AdminController::class, 'watchdogTest']);
+    $r->get('/health', [C\HealthController::class, 'health']);
 
     // Public status page
     $r->get('/status/{slug:[a-z0-9\-]+}.json', [C\StatusController::class, 'feed']);

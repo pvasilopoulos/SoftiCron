@@ -17,7 +17,7 @@ use FastRoute\Dispatcher;
 App::boot(dirname(__DIR__));
 $request = new Request();
 // Machine endpoints (heartbeat pings, REST API, public status page) are stateless: no session, no CSRF.
-$stateless = (bool) preg_match('#^/(ping|api/v1|status)(/|$)#', $request->path);
+$stateless = (bool) preg_match('#^/(ping|api/v1|status|health)(/|$)#', $request->path);
 $api = (bool) preg_match('#^/api/v1(/|$)#', $request->path);
 if (!$stateless) {
     Session::start($request->isSecure());

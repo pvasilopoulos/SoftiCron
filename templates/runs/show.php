@@ -54,6 +54,16 @@ $triggers = ['schedule' => 'Προγραμματισμένη', 'manual' => 'Χε
       <h2>Request</h2>
       <p class="mono small" style="word-break:break-all"><span class="pill"><?= e($run['request_method'] ?? '') ?></span> <?= e($run['request_url'] ?? '') ?></p>
     </section>
+    <?php $checks = json_decode((string) ($run['assertion_results'] ?? ''), true) ?: []; if ($checks): $passed = count(array_filter($checks, fn ($c) => $c['ok'])); ?>
+      <section class="card stack-sm">
+        <div class="row between"><h2>Έλεγχοι απάντησης</h2><span class="badge <?= $passed === count($checks) ? 'ok' : 'fail' ?>"><?= $passed ?>/<?= count($checks) ?> πέρασαν</span></div>
+        <ul class="assert-results">
+          <?php foreach ($checks as $c): ?>
+            <li class="<?= $c['ok'] ? 'ok' : 'bad' ?>"><span aria-hidden="true"><?= $c['ok'] ? '✓' : '✗' ?></span><span><?= e($c['label']) ?><small>βρέθηκε: <?= e($c['actual']) ?></small></span></li>
+          <?php endforeach; ?>
+        </ul>
+      </section>
+    <?php endif; ?>
     <section class="card stack-sm">
       <div class="row between"><h2>Response</h2><?php if ($body !== ''): ?><button class="btn btn-sm" type="button" data-copy="<?= e($body) ?>"><?= icon('copy', 14) ?>Αντιγραφή</button><?php endif; ?></div>
       <?php if ($run['response_headers']): ?>

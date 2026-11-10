@@ -33,12 +33,14 @@ final class Scheduler
         }
         try {
             Settings::set(0, 'scheduler.last_tick', $this->db->now());
+            Watchdog::onTick();
             $this->recoverStuck();
             $this->scheduleDue();
             $this->process($deadline);
             $this->escalate();
             Reports::sendWeeklyDue();
             $this->maintenance();
+            Watchdog::pingOut();
         } finally {
             $this->db->value("SELECT RELEASE_LOCK('cronapp_scheduler')");
         }
@@ -260,7 +262,7 @@ final class Scheduler
             [$run, $job, $tenant, $req] = $meta[$id];
             $this->stats['executed']++;
             $attempt = (int) $run['attempts'] + 1;
-            [$ok, $reason] = HttpExecutor::evaluate($job, $res);
+            [$ok, $reason, $checks] = HttpExecutor::evaluateFull($job, $res);
             if (($job['auth_type'] ?? '') === 'oauth2' && (int) $res['http_status'] === 401) {
                 JobAuth::invalidate((int) $job['id']); // token rejected: the retry fetches a new one
             }
@@ -277,6 +279,7 @@ final class Scheduler
                 'response_headers' => $res['headers'] !== '' ? $res['headers'] : null,
                 'response_body' => $res['body'] !== '' ? $res['body'] : null,
                 'response_size' => $res['size'],
+                'assertion_results' => $checks ? json_encode($checks, JSON_UNESCAPED_UNICODE) : null,
             ];
             $maxAttempts = 1 + (int) $job['max_retries'];
             if (!$ok && $attempt < $maxAttempts) {
@@ -338,7 +341,7 @@ final class Scheduler
         try {
             if ($ok) {
                 $prevStreak = self::failStreak((int) $job['id'], (int) $run['id']);
-                $db->update('jobs', ['failing_since' => null, 'escalated_at' => null], 'id = :id', ['id' => $job['id']]);
+                $db->update('jobs', ['failing_since' => null, 'escalated_at' => null, 'acked_at' => null, 'acked_by' => null, 'acked_name' => null, 'ack_note' => null], 'id = :id', ['id' => $job['id']]);
                 // Announce recovery only if the failure had been announced.
                 if ($prevStreak >= $threshold) {
                     Notifier::dispatch('recovered', $job, $run, $tenant);
@@ -370,7 +373,7 @@ final class Scheduler
             "SELECT j.* FROM jobs j JOIN tenants t ON t.id = j.tenant_id
              WHERE j.enabled = 1 AND t.status = 'active' AND j.last_status = 'failed'
                AND j.escalate_after_minutes IS NOT NULL AND j.escalate_channels IS NOT NULL AND j.escalate_channels <> ''
-               AND j.failing_since IS NOT NULL AND j.escalated_at IS NULL
+               AND j.failing_since IS NOT NULL AND j.escalated_at IS NULL AND j.acked_at IS NULL
                AND j.failing_since <= UTC_TIMESTAMP() - INTERVAL j.escalate_after_minutes MINUTE",
         );
         foreach ($jobs as $job) {
