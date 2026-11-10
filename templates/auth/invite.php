@@ -1,6 +1,6 @@
 <?php /** @var array $inv @var string $token @var ?array $existing */ ?>
 <div class="card">
-  <form method="post" action="<?= e(url('invite/' . $token)) ?>" class="stack">
+  <form method="post" action="<?= e(url('invite/' . $token)) ?>" class="stack" data-once data-loading>
     <?= csrf_field() ?>
     <div>
       <h1 style="font-size:22px">Πρόσκληση στον <?= e($inv['tenant_name']) ?></h1>

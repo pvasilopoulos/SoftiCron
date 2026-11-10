@@ -21,6 +21,14 @@ final class Session
         ]);
         ini_set('session.use_strict_mode', '1');
         ini_set('session.gc_maxlifetime', '28800');
+        // Own session directory: the hosting's shared session cleaner (often 24 min) must not
+        // delete sessions early, which made forms opened a while ago fail with 419.
+        $dir = App::$root . '/storage/sessions';
+        if ((is_dir($dir) || @mkdir($dir, 0700, true)) && is_writable($dir)) {
+            session_save_path($dir);
+            ini_set('session.gc_probability', '1');
+            ini_set('session.gc_divisor', '100');
+        }
         session_start();
     }
 

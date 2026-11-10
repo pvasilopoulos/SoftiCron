@@ -79,9 +79,40 @@
     document.addEventListener('submit', (e) => {
       const f = e.target;
       if (f.dataset.confirm && !confirm(f.dataset.confirm)) { e.preventDefault(); return; }
+      // Forms that must be sent once (login): a double tap would reuse a rotated session → 419.
+      if (f.hasAttribute('data-once')) {
+        if (f._sent) { e.preventDefault(); return; }
+        f._sent = true;
+      }
       if (f.hasAttribute('data-loading')) f.querySelectorAll('button[type="submit"]').forEach((b) => { b.classList.add('loading'); b.dataset.label = b.textContent; });
     }, true);
     document.querySelectorAll('[data-autosubmit]').forEach((s) => s.addEventListener('change', () => s.form.submit()));
+
+    // Fresh CSRF token when a page comes back after a long time (mobile browsers keep tabs
+    // in memory for hours, or restore them from the back/forward cache).
+    const refreshCsrf = async () => {
+      try {
+        const res = await fetch(base + '/csrf-token', { headers: { Accept: 'application/json' }, credentials: 'same-origin', cache: 'no-store' });
+        const d = await res.json();
+        if (!d.token) return;
+        window.APP.csrf = d.token;
+        document.querySelector('meta[name="csrf-token"]')?.setAttribute('content', d.token);
+        document.querySelectorAll('input[name="_csrf"]').forEach((i) => { i.value = d.token; });
+      } catch (e) { /* offline */ }
+    };
+    let hiddenAt = 0;
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') hiddenAt = Date.now();
+      else if (hiddenAt && Date.now() - hiddenAt > 120000) refreshCsrf();
+    });
+    addEventListener('pageshow', (e) => {
+      if (!e.persisted) return;
+      document.querySelectorAll('form[data-once]').forEach((f) => {
+        f._sent = false;
+        f.querySelectorAll('button.loading').forEach((b) => b.classList.remove('loading'));
+      });
+      refreshCsrf();
+    });
 
     // Job enable switches (AJAX, falls back to normal submit)
     document.querySelectorAll('[data-toggle-form] [data-submit-on-change]').forEach((cb) => cb.addEventListener('change', async () => {

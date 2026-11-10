@@ -40,7 +40,19 @@ try {
     if (!$stateless && $request->method !== 'GET' && $request->method !== 'HEAD') {
         $token = $_POST['_csrf'] ?? ($_SERVER['HTTP_X_CSRF_TOKEN'] ?? null);
         if (!Csrf::check(is_string($token) ? $token : null)) {
-            throw new HttpException(419, 'Η φόρμα έληξε. Ανανέωσε τη σελίδα και δοκίμασε ξανά.');
+            if ($request->wantsJson()) {
+                throw new HttpException(419, 'Η φόρμα έληξε. Ανανέωσε τη σελίδα και δοκίμασε ξανά.');
+            }
+            // Double-tapped "Σύνδεση": the first request already logged in and rotated the session.
+            if ($request->path === '/login' && Auth::check()) {
+                throw new HttpException(419, '', url('/'));
+            }
+            // Stale page (left open for long, restored by the mobile browser…): back to the form with a fresh token.
+            $_SESSION['_old'] = array_filter($_POST, fn ($k) => !preg_match('/pass|secret|token|_csrf/i', (string) $k), ARRAY_FILTER_USE_KEY);
+            Session::flash('error', 'Η σελίδα είχε λήξει, οπότε η ενέργεια δεν ολοκληρώθηκε. Δοκίμασε ξανά.');
+            $ref = (string) ($_SERVER['HTTP_REFERER'] ?? '');
+            $sameHost = $ref !== '' && parse_url($ref, PHP_URL_HOST) === parse_url('http://' . ($_SERVER['HTTP_HOST'] ?? ''), PHP_URL_HOST);
+            throw new HttpException(419, '', $sameHost ? $ref : url($request->path === '/login' ? 'login' : '/'));
         }
     }
 

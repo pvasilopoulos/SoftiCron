@@ -20,6 +20,14 @@ final class AuthController extends Controller
         return $this->view('auth/login', ['title' => 'Σύνδεση'], 'auth_layout');
     }
 
+    /** Fresh CSRF token for pages that stayed open for long (mobile tabs restored from memory). */
+    public function csrfToken(): Response
+    {
+        $r = Response::json(['token' => \App\Core\Csrf::token()]);
+        $r->headers['Cache-Control'] = 'no-store';
+        return $r;
+    }
+
     public function login(): Response
     {
         $email = (string) $this->req->input('email', '');

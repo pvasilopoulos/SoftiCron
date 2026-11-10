@@ -1,5 +1,5 @@
 <div class="card">
-  <form method="post" action="<?= e(url('login')) ?>" class="stack">
+  <form method="post" action="<?= e(url('login')) ?>" class="stack" data-once data-loading>
     <?= csrf_field() ?>
     <div>
       <h1 style="font-size:22px">Σύνδεση</h1>

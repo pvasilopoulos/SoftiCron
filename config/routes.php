@@ -9,6 +9,7 @@ return static function (RouteCollector $r): void {
     // Auth
     $r->get('/login', [C\AuthController::class, 'loginForm']);
     $r->post('/login', [C\AuthController::class, 'login']);
+    $r->get('/csrf-token', [C\AuthController::class, 'csrfToken']);
     $r->post('/logout', [C\AuthController::class, 'logout']);
     $r->get('/invite/{token}', [C\AuthController::class, 'inviteForm']);
     $r->post('/invite/{token}', [C\AuthController::class, 'acceptInvite']);
