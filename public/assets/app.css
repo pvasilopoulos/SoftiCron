@@ -825,3 +825,47 @@ html[data-hold-refresh] .content { padding-bottom: 110px; }
 /* Event x channel matrix: event column stays visible while scrolling sideways */
 .notify-matrix th:first-child, .notify-matrix td:first-child { position: sticky; left: 0; z-index: 1; background: var(--surface); box-shadow: 6px 0 8px -8px rgba(15, 23, 42, .25); }
 @media (max-width: 760px) { .notify-matrix td:first-child { min-width: 120px; white-space: normal; } }
+
+/* Job cards on phones: switch + actions share one footer row, buttons never squeeze */
+@media (max-width: 760px) {
+  .jobs-table tr.jrow { display: flex; flex-wrap: wrap; gap: 12px 16px; }
+  .jobs-table tr.jrow > td { flex: 1 1 calc(50% - 8px); }
+  .jobs-table tr.jrow > td.primary { flex-basis: 100%; }
+  .jobs-table tr.jrow > td[data-label="Ενεργό"] { flex: 0 0 auto; align-self: stretch; }
+  .jobs-table tr.jrow > td[data-label="Ενεργό"]::before { content: none; }
+  .jobs-table tr.jrow > td[data-label="Ενέργειες"] { flex: 1 1 0; min-width: 0; }
+  .jobs-table td[data-label="Ενέργειες"] > .row { gap: 8px !important; }
+  .jobs-table td[data-label="Ενέργειες"] form.inline { flex: 1 1 auto; min-width: 0; }
+  .jobs-table td[data-label="Ενέργειες"] form.inline .btn { width: 100%; }
+  .jobs-table td[data-label="Ενέργειες"] .btn { min-height: 40px; border-radius: 10px; }
+  .jobs-table td[data-label="Ενέργειες"] .btn-icon { flex: 0 0 40px; width: 40px !important; padding: 0; }
+  .jobs-table td[data-label="Ενέργειες"] .jmenu summary { display: inline-flex; font-size: 18px; line-height: 1; }
+  .jobs-table td[data-label="Ενέργειες"] .jmenu { flex: 0 0 40px; }
+  .jobs-table .jmenu .feed-menu { bottom: calc(100% + 6px); top: auto; }
+}
+@media (max-width: 760px) {
+  /* Enable switch in the top-right corner of each job card */
+  .jobs-table tr.jrow { position: relative; }
+  .jobs-table tr.jrow > td[data-label="Ενεργό"] { position: absolute; top: 14px; right: 16px; padding: 0 !important; border-top: 0; }
+  .jobs-table tr.jrow > td.primary { padding-right: 56px !important; }
+  .jobs-table tr.jrow > td[data-label="Ενέργειες"] { flex: 1 1 100%; }
+}
+@media (max-width: 760px) {
+  /* Job card: info in four soft tiles, clean footer */
+  .jobs-table tr.jrow { gap: 8px; padding: 16px; }
+  .jobs-table tr.jrow > td.primary { padding-bottom: 6px !important; }
+  .jobs-table .jname { font-size: 16px; line-height: 1.3; }
+  .jobs-table .jcell { gap: 12px; }
+  .jobs-table tr.jrow > td[data-label="Πρόγραμμα"], .jobs-table tr.jrow > td[data-label="Τελευταία"],
+  .jobs-table tr.jrow > td[data-label="Ιστορικό"], .jobs-table tr.jrow > td[data-label="Επόμενη"] {
+    flex: 1 1 calc(50% - 4px); padding: 10px 12px !important; border-radius: 12px; background: var(--surface-2); gap: 5px; min-height: 76px; }
+  .jobs-table tr.jrow > td::before { font-size: 10.5px; letter-spacing: .05em; }
+  .jobs-table td[data-label="Πρόγραμμα"] > .stack-sm > span { font-size: 13px; line-height: 1.35; }
+  .jobs-table td[data-label="Πρόγραμμα"] code { font-size: 11px; padding: 1px 6px; border-radius: 5px; background: var(--surface-3); align-self: flex-start; }
+  .jobs-table .spark { height: 20px; max-width: none; }
+  .jobs-table .spark .sp-empty { background: var(--border); }
+  .jobs-table tr.jrow > td[data-label="Ενέργειες"] { border-top: 0; padding-top: 6px !important; }
+  .jobs-table tr.jrow.is-failing > td[data-label="Τελευταία"] { background: var(--fail-bg); }
+  .jobs-table tr.jrow.is-paused { opacity: .75; }
+  .jobs-table tr.jrow.is-paused > td[data-label="Ενεργό"] { opacity: 1; }
+}
