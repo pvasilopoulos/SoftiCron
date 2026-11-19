@@ -184,6 +184,10 @@ final class BackupController extends Controller
             $this->flash('error', $e->getMessage());
             return $this->redirect('backup#restore');
         }
+        if (($meta['format'] ?? '') === Backup::PLATFORM_FORMAT) {
+            $this->flash('error', 'Αυτό είναι backup όλης της πλατφόρμας: η επαναφορά του γίνεται από τον super admin, στο Backup πλατφόρμας.');
+            return $this->redirect('backup#restore');
+        }
         $sections = array_values(array_intersect(array_keys(Backup::SECTIONS), (array) ($_POST['sections'] ?? [])));
         if (!$sections) {
             $this->flash('error', 'Διάλεξε τι θα επαναφερθεί.');

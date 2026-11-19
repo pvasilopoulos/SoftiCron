@@ -36,7 +36,7 @@ $logoUrl = $tenant && $tenant['logo_path'] ? url('branding/' . $tenant['id'] . '
 $short = [
     'dashboard' => 'Αρχική', 'reports' => 'Αναφορές', 'templates' => 'Templates', 'notifications' => 'Ειδοπ/σεις', 'variables' => 'Μεταβλητές',
     'devices' => 'Συσκευές', 'status-page' => 'Status', 'audit' => 'Audit', 'settings' => 'Ρυθμίσεις', 'admin' => 'Tenants', 'system' => 'Σύστημα',
-    'connectors' => 'Connectors', 'runs' => 'Εκτελέσεις', 'backup' => 'Backup',
+    'connectors' => 'Connectors', 'runs' => 'Εκτελέσεις', 'backup' => 'Backup', 'platform-backup' => 'Backup',
 ];
 $link = function (array $it) use ($nav, $failing, $short): string {
     [$key, $href, $label, $ic] = $it;
@@ -106,6 +106,7 @@ echo App\Core\View::partial('partials/head', ['title' => $title ?? '']);
         <div class="nav-label">Πλατφόρμα</div>
         <?= $link(['admin', 'admin/tenants', 'Tenants', 'building']) ?>
         <?= $link(['system', 'admin/system', 'Κατάσταση συστήματος', 'refresh']) ?>
+        <?= $link(['platform-backup', 'admin/backup', 'Backup πλατφόρμας', 'download']) ?>
       <?php endif; ?>
     </nav>
     <div class="side-user">

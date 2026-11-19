@@ -146,6 +146,14 @@ return static function (RouteCollector $r): void {
     $r->get('/admin/system', [C\AdminController::class, 'system']);
     $r->post('/admin/system/watchdog', [C\AdminController::class, 'watchdogSave']);
     $r->post('/admin/system/watchdog/test', [C\AdminController::class, 'watchdogTest']);
+    $r->get('/admin/backup', [C\PlatformBackupController::class, 'index']);
+    $r->post('/admin/backup/download', [C\PlatformBackupController::class, 'download']);
+    $r->get('/admin/backup/report', [C\PlatformBackupController::class, 'report']);
+    $r->post('/admin/backup/settings', [C\PlatformBackupController::class, 'saveSettings']);
+    $r->post('/admin/backup/run', [C\PlatformBackupController::class, 'runNow']);
+    $r->post('/admin/backup/restore', [C\PlatformBackupController::class, 'restore']);
+    $r->get('/admin/backup/files/{name:softicron-platform-[a-z0-9-]+\.json}', [C\PlatformBackupController::class, 'fileDownload']);
+    $r->post('/admin/backup/files/{name:softicron-platform-[a-z0-9-]+\.json}/delete', [C\PlatformBackupController::class, 'fileDelete']);
     $r->get('/health', [C\HealthController::class, 'health']);
 
     // Public status page

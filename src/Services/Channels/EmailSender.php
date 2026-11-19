@@ -133,7 +133,8 @@ final class EmailSender
         return (string) Env::get('MAIL_HOST', '') !== '' && (string) Env::get('MAIL_FROM', '') !== '';
     }
 
-    public static function sendPlatform(array $to, string $subject, string $html, string $text): void
+    /** @param array<string, array{0:string,1:string}> $attachments filename => [contents, mime type] */
+    public static function sendPlatform(array $to, string $subject, string $html, string $text, array $attachments = []): void
     {
         self::smtp([
             'host' => Env::get('MAIL_HOST'),
@@ -143,6 +144,6 @@ final class EmailSender
             'password' => Env::get('MAIL_PASS'),
             'from_email' => Env::get('MAIL_FROM'),
             'from_name' => Env::get('MAIL_FROM_NAME', 'CronApp'),
-        ], $to, $subject, $html, $text, false);
+        ], $to, $subject, $html, $text, false, $attachments);
     }
 }

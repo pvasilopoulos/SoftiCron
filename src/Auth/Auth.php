@@ -161,6 +161,19 @@ final class Auth
         return self::$tenant;
     }
 
+    /**
+     * Super admin only: act on another tenant for the rest of this request, without changing
+     * the session (platform backup restore). Pass the previous tenant back to undo.
+     */
+    public static function useTenant(?array $tenant): void
+    {
+        self::load();
+        if (!self::isSuperAdmin()) {
+            throw new \LogicException('Only super admins can switch tenant in-request.');
+        }
+        self::$tenant = $tenant;
+    }
+
     public static function tenantId(): ?int
     {
         $t = self::tenant();
