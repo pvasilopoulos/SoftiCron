@@ -25,6 +25,7 @@ $admin = [
     ['roles', 'roles', 'Ρόλοι', 'roles', 'roles.manage'],
     ['status-page', 'status-page', 'Σελίδα κατάστασης', 'send', 'settings.status_page'],
     ['audit', 'audit', 'Audit log', 'audit', 'audit.view'],
+    ['backup', 'backup', 'Backup & επαναφορά', 'download', \App\Controllers\BackupController::PERMS],
     ['settings', 'settings', 'Ρυθμίσεις', 'settings', \App\Controllers\SettingsController::SETTINGS_PERMS],
 ];
 $tenants = Auth::tenants();
@@ -35,7 +36,7 @@ $logoUrl = $tenant && $tenant['logo_path'] ? url('branding/' . $tenant['id'] . '
 $short = [
     'dashboard' => 'Αρχική', 'reports' => 'Αναφορές', 'templates' => 'Templates', 'notifications' => 'Ειδοπ/σεις', 'variables' => 'Μεταβλητές',
     'devices' => 'Συσκευές', 'status-page' => 'Status', 'audit' => 'Audit', 'settings' => 'Ρυθμίσεις', 'admin' => 'Tenants', 'system' => 'Σύστημα',
-    'connectors' => 'Connectors', 'runs' => 'Εκτελέσεις',
+    'connectors' => 'Connectors', 'runs' => 'Εκτελέσεις', 'backup' => 'Backup',
 ];
 $link = function (array $it) use ($nav, $failing, $short): string {
     [$key, $href, $label, $ic] = $it;

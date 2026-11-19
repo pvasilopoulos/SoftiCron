@@ -13,22 +13,23 @@ final class EmailSender
 {
     /**
      * @param string[] $to
+     * @param array<string, array{0:string,1:string}> $attachments filename => [contents, mime type]
      * @throws \RuntimeException
      */
-    public static function send(string $type, array $cfg, array $to, string $subject, string $html, string $text): void
+    public static function send(string $type, array $cfg, array $to, string $subject, string $html, string $text, array $attachments = []): void
     {
         $to = array_values(array_filter(array_map('trim', $to), fn ($e) => filter_var($e, FILTER_VALIDATE_EMAIL)));
         if (!$to) {
             throw new \RuntimeException('Δεν υπάρχουν έγκυροι παραλήπτες email.');
         }
         match ($type) {
-            'smtp' => self::smtp($cfg, $to, $subject, $html, $text),
-            'm365' => self::graph($cfg, $to, $subject, $html),
+            'smtp' => self::smtp($cfg, $to, $subject, $html, $text, true, $attachments),
+            'm365' => self::graph($cfg, $to, $subject, $html, $attachments),
             default => throw new \RuntimeException("Άγνωστος τύπος email connector: $type"),
         };
     }
 
-    private static function smtp(array $cfg, array $to, string $subject, string $html, string $text, bool $checkHost = true): void
+    private static function smtp(array $cfg, array $to, string $subject, string $html, string $text, bool $checkHost = true, array $attachments = []): void
     {
         if ($checkHost) {
             try {
@@ -65,6 +66,9 @@ final class EmailSender
         $m->isHTML(true);
         $m->Body = $html;
         $m->AltBody = $text;
+        foreach ($attachments as $fname => [$data, $mime]) {
+            $m->addStringAttachment($data, (string) $fname, PHPMailer::ENCODING_BASE64, $mime);
+        }
         try {
             $m->send();
         } catch (\Throwable $e) {
@@ -72,7 +76,7 @@ final class EmailSender
         }
     }
 
-    private static function graph(array $cfg, array $to, string $subject, string $html): void
+    private static function graph(array $cfg, array $to, string $subject, string $html, array $attachments = []): void
     {
         foreach (['tenant_id', 'client_id', 'client_secret', 'sender'] as $k) {
             if (empty($cfg[$k])) {
@@ -88,6 +92,9 @@ final class EmailSender
             ],
             'saveToSentItems' => false,
         ];
+        foreach ($attachments as $fname => [$data, $mime]) {
+            $payload['message']['attachments'][] = ['@odata.type' => '#microsoft.graph.fileAttachment', 'name' => (string) $fname, 'contentType' => $mime, 'contentBytes' => base64_encode($data)];
+        }
         [$code, $body] = Http::request(
             'POST',
             'https://graph.microsoft.com/v1.0/users/' . rawurlencode((string) $cfg['sender']) . '/sendMail',

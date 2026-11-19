@@ -134,6 +134,10 @@ final class JobIO
                 $in['push_target'] = 'all'; // recipients are tenant-specific and not portable
             }
         }
+        // Backup restore: tenant-specific form fields resolved by the caller (connector ids, push recipients...).
+        if (is_array($data['_input'] ?? null)) {
+            $in = array_replace($in, $data['_input']);
+        }
         return $in;
     }
 

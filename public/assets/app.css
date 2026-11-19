@@ -947,3 +947,19 @@ html[data-hold-refresh] .content { padding-bottom: 110px; }
 @media (max-width: 1180px) { .cal-layout { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 760px) { .cal-grid { gap: 3px; } .cal-day { min-height: 54px; padding: 4px; border-radius: 8px; } .cd-n { font-size: 12px; min-width: 20px; height: 20px; } .cd-stats > span { padding: 2px 3px; font-size: 9.5px; } .cd-stats .cd-plan { display: none; } .cal-nav h2 { min-width: 0; font-size: 15px; } .cal-filters { width: 100%; } .cal-filters .select { flex: 1 1 140px; max-width: none; } .cal-hours { gap: 1px; } }
 .assert-box[disabled] [data-assert-del] { display: none; }
+
+/* Backup & restore */
+.backup-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; margin-bottom: 16px; }
+.backup-grid > .card { margin: 0; }
+.bk-head { display: flex; gap: 12px; align-items: flex-start; }
+.bk-head h2 { margin: 0 0 2px; }
+.bk-head p { margin: 0; }
+.bk-ic { flex: 0 0 40px; width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent-text); }
+.bk-ic-xls { background: var(--ok-bg); color: var(--ok-fg); }
+.bk-ic-warn { background: var(--warn-bg); color: var(--warn-fg); }
+.bk-list { margin: 0; padding-left: 18px; display: grid; gap: 4px; color: var(--text-2); }
+.backup-grid .form-actions { margin-top: auto; }
+.bk-sched { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+.bk-stored-note { padding: 10px 12px; border-radius: 10px; background: var(--accent-soft); color: var(--accent-text); }
+@media (max-width: 760px) { .backup-grid { grid-template-columns: minmax(0, 1fr); } }
+.backup-page [hidden], [data-bk-weekly][hidden], [data-bk-upload][hidden], .bk-stored-note[hidden] { display: none !important; }

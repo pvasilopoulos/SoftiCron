@@ -193,6 +193,14 @@ return static function (RouteCollector $r): void {
 
     // Job import/export & versions
     $r->get('/jobs/export', [C\JobIoController::class, 'export']);
+    $r->get('/backup', [C\BackupController::class, 'index']);
+    $r->post('/backup/download', [C\BackupController::class, 'download']);
+    $r->get('/backup/report', [C\BackupController::class, 'report']);
+    $r->post('/backup/settings', [C\BackupController::class, 'saveSettings']);
+    $r->post('/backup/run', [C\BackupController::class, 'runNow']);
+    $r->post('/backup/restore', [C\BackupController::class, 'restore']);
+    $r->get('/backup/files/{name:softicron-backup-[a-z0-9-]+\.json}', [C\BackupController::class, 'fileDownload']);
+    $r->post('/backup/files/{name:softicron-backup-[a-z0-9-]+\.json}/delete', [C\BackupController::class, 'fileDelete']);
     $r->get('/jobs/import', [C\JobIoController::class, 'importForm']);
     $r->post('/jobs/import', [C\JobIoController::class, 'import']);
     $r->get('/jobs/{id:\d+}/versions', [C\JobIoController::class, 'versions']);

@@ -39,6 +39,7 @@ final class Scheduler
             $this->process($deadline);
             $this->escalate();
             Reports::sendWeeklyDue();
+            Backup::runDue();
             $this->maintenance();
             Watchdog::pingOut();
         } finally {

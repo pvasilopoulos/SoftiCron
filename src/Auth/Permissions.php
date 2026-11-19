@@ -64,6 +64,10 @@ final class Permissions
         'settings.menu' => ['Ρυθμίσεις', 'Μενού κινητού', 'Κουμπιά της κάτω μπάρας στο κινητό.'],
         'settings.status_page' => ['Ρυθμίσεις', 'Σελίδα κατάστασης', 'Δημόσια σελίδα κατάστασης: ενεργοποίηση, διεύθυνση, κείμενα.'],
 
+        // Backup
+        'backup.manage' => ['Backup', 'Δημιουργία & λήψη backup', 'Πλήρη κρυπτογραφημένα backup (περιέχουν και τα secrets), αποθηκευμένα backup και αυτόματο backup.'],
+        'backup.restore' => ['Backup', 'Επαναφορά από backup', 'Επαναφορά jobs, connectors, μεταβλητών, templates και ρυθμίσεων από αρχείο backup.'],
+
         // Users
         'users.view' => ['Χρήστες & ρόλοι', 'Προβολή χρηστών', 'Λίστα μελών και εκκρεμών προσκλήσεων.'],
         'users.manage' => ['Χρήστες & ρόλοι', 'Διαχείριση χρηστών', 'Πρόσκληση, δημιουργία, επεξεργασία και αλλαγή ρόλου.'],
@@ -92,6 +96,7 @@ final class Permissions
         'users.manage' => ['users.view'], 'users.delete' => ['users.view'], 'roles.manage' => ['users.view'],
         'devices.view' => ['users.view'], 'devices.manage' => ['devices.view'],
         'audit.export' => ['audit.view'],
+        'backup.manage' => ['jobs.view'], 'backup.restore' => ['jobs.view'],
     ];
 
     /** Short description of each group (role editor). */
@@ -106,6 +111,7 @@ final class Permissions
         'Μεταβλητές & secrets' => 'Τιμές που χρησιμοποιούν τα jobs.',
         'API' => 'Πρόσβαση μέσω REST API.',
         'Ρυθμίσεις' => 'Ρυθμίσεις οργανισμού.',
+        'Backup' => 'Πλήρη backup και επαναφορά. Η αναλυτική αναφορά Excel ακολουθεί το δικαίωμα «Εξαγωγή jobs».',
         'Χρήστες & ρόλοι' => 'Μέλη, προσκλήσεις και δικαιώματα.',
         'Ασφάλεια' => 'Καταγραφή ενεργειών.',
     ];

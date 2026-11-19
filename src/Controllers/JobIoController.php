@@ -114,6 +114,22 @@ final class JobIoController extends Controller
         $paused = (bool) $this->req->input('paused');
         $dry = (bool) $this->req->input('dry_run');
         $groupOverride = trim((string) $this->req->input('group', ''));
+        $result = $this->importItems($tenant, $items, $mode, $paused, $dry, $groupOverride);
+        $sum = array_count_values(array_column($result, 1));
+        if (!$dry) {
+            Audit::log('job.imported', 'job', null, sprintf('%d νέα, %d ενημερώσεις, %d παραλείφθηκαν, %d σφάλματα', $sum['created'] ?? 0, $sum['updated'] ?? 0, $sum['skipped'] ?? 0, $sum['error'] ?? 0));
+        }
+        return $this->view('jobs/import', ['title' => 'Εισαγωγή jobs', 'nav' => 'jobs', 'result' => $result, 'summary' => $sum, 'dry' => $dry]);
+    }
+
+    /**
+     * Creates or updates jobs from portable arrays (JSON import and backup restore).
+     * $mode: skip | copy | update (match by name). $after($id, $item) runs after each saved job.
+     *
+     * @return array<int, array{0:string,1:string,2:string,3?:int}> [label, created|updated|skipped|error, message, id]
+     */
+    public function importItems(array $tenant, array $items, string $mode, bool $paused, bool $dry, string $groupOverride = '', string $origin = 'εισαγωγή', ?callable $after = null): array
+    {
         $count = (int) $this->db->value('SELECT COUNT(*) FROM jobs WHERE tenant_id = ?', [$tenant['id']]);
         $result = [];
         $postBackup = $_POST;
@@ -157,12 +173,12 @@ final class JobIoController extends Controller
             }
             if ($existing) {
                 $id = (int) $existing['id'];
-                JobVersions::snapshot($id, 'Πριν την εισαγωγή');
+                JobVersions::snapshot($id, 'Πριν την ' . $origin);
                 $this->db->transaction(function () use ($id, $data, $rules, $targets, $jc): void {
                     $this->db->update('jobs', $data, 'id = :id', ['id' => $id]);
                     $jc->saveRules($id, $rules, $targets);
                 });
-                Audit::log('job.updated', 'job', $id, $data['name'] . ' (εισαγωγή)', $jc->auditable($existing), $jc->auditable($data));
+                Audit::log('job.updated', 'job', $id, $data['name'] . ' (' . $origin . ')', $jc->auditable($existing), $jc->auditable($data));
             } else {
                 $id = $this->db->transaction(function () use ($data, $rules, $targets, $tenant, $jc): int {
                     $id = $this->db->insert('jobs', $data + ['tenant_id' => $tenant['id'], 'created_by' => Auth::id(), 'ping_token' => bin2hex(random_bytes(16))]);
@@ -170,18 +186,17 @@ final class JobIoController extends Controller
                     return $id;
                 });
                 $count++;
-                Audit::log('job.created', 'job', $id, $data['name'] . ' (εισαγωγή)', null, $jc->auditable($data));
+                Audit::log('job.created', 'job', $id, $data['name'] . ' (' . $origin . ')', null, $jc->auditable($data));
             }
             Scheduler::refreshNextRun($id);
-            JobVersions::snapshot($id, 'Εισαγωγή από JSON');
+            JobVersions::snapshot($id, $origin === 'εισαγωγή' ? 'Εισαγωγή από JSON' : 'Επαναφορά από backup');
+            if ($after) {
+                $after($id, $item);
+            }
             $result[] = [$label, $existing ? 'updated' : 'created', '', $id];
         }
         $_POST = $postBackup;
-        $sum = array_count_values(array_column($result, 1));
-        if (!$dry) {
-            Audit::log('job.imported', 'job', null, sprintf('%d νέα, %d ενημερώσεις, %d παραλείφθηκαν, %d σφάλματα', $sum['created'] ?? 0, $sum['updated'] ?? 0, $sum['skipped'] ?? 0, $sum['error'] ?? 0));
-        }
-        return $this->view('jobs/import', ['title' => 'Εισαγωγή jobs', 'nav' => 'jobs', 'result' => $result, 'summary' => $sum, 'dry' => $dry]);
+        return $result;
     }
 
     // ---- Versions ---------------------------------------------------------------
