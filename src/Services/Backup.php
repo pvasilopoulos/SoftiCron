@@ -691,6 +691,28 @@ final class Backup
         return self::workbook(self::platform(), $header ?? ['Οργανισμός'], $widths ?? [24], $all, $summaryHeader, $summary, [28, 18, 13, 16, 8, 8, 9, 12, 12, 12, 13, 10], 'ώρα κάθε οργανισμού', 'Οργανισμοί', true);
     }
 
+    /** A ZIP with the detailed report of every tenant as a separate file (named after its slug). */
+    public static function platformReportZip(): array
+    {
+        if (!XlsxWriter::available()) {
+            throw new \RuntimeException('Η επέκταση zip της PHP δεν είναι διαθέσιμη στον server.');
+        }
+        $tmp = tempnam(sys_get_temp_dir(), 'rzip');
+        $zip = new \ZipArchive();
+        if ($zip->open($tmp, \ZipArchive::OVERWRITE) !== true) {
+            throw new \RuntimeException('Δεν ήταν δυνατή η δημιουργία του αρχείου ZIP.');
+        }
+        $date = (new \DateTimeImmutable('now', new \DateTimeZone('Europe/Athens')))->format('Ymd');
+        foreach (App::db()->all('SELECT * FROM tenants ORDER BY name') as $tenant) {
+            [, $data] = self::report($tenant);
+            $zip->addFromString('softicron-jobs-' . $tenant['slug'] . '-' . $date . '.xlsx', $data);
+        }
+        $zip->close();
+        $data = (string) file_get_contents($tmp);
+        @unlink($tmp);
+        return [self::filename(self::platform(), 'zip', 'jobs'), $data, 'application/zip'];
+    }
+
     private static function workbook(array $tenant, array $header, array $widths, array $d, array $summaryHeader, array $summary, array $summaryWidths, string $tzLabel, string $summaryName = 'Σύνοψη', bool $withTenant = false): array
     {
         $pre = $withTenant ? ['Οργανισμός'] : [];

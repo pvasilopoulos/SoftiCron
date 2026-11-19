@@ -962,4 +962,4 @@ html[data-hold-refresh] .content { padding-bottom: 110px; }
 .bk-sched { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
 .bk-stored-note { padding: 10px 12px; border-radius: 10px; background: var(--accent-soft); color: var(--accent-text); }
 @media (max-width: 760px) { .backup-grid { grid-template-columns: minmax(0, 1fr); } }
-.backup-page [hidden], [data-bk-weekly][hidden], [data-bk-upload][hidden], .bk-stored-note[hidden] { display: none !important; }
+.backup-page [hidden], [data-rep-layout][hidden], [data-bk-weekly][hidden], [data-bk-upload][hidden], .bk-stored-note[hidden] { display: none !important; }

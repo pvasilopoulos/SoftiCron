@@ -70,12 +70,26 @@ $totJobs = array_sum(array_column($tenants, 'jobs'));
   </form>
 
   <form method="get" action="<?= e(url('admin/backup/report')) ?>" class="card stack">
-    <div class="bk-head"><span class="bk-ic bk-ic-xls"><?= icon('templates', 20) ?></span><div><h2>Αναλυτική αναφορά Excel όλων</h2><p class="small muted">Ένα αρχείο με στήλη «Οργανισμός» σε κάθε φύλλο.</p></div></div>
+    <div class="bk-head"><span class="bk-ic bk-ic-xls"><?= icon('templates', 20) ?></span><div><h2>Αναλυτική αναφορά Excel</h2><p class="small muted">Για όλους τους οργανισμούς ή για έναν.</p></div></div>
     <ul class="bk-list small">
       <li><strong>Οργανισμοί:</strong> σύνοψη ανά οργανισμό (jobs, ενεργά, αποτυχίες, εκτελέσεις 30 ημερών)</li>
-      <li><strong>Jobs, Ειδοποιήσεις, Έλεγχοι, Headers, Επόμενες εκτελέσεις</strong> για όλους</li>
+      <li><strong>Jobs, Ειδοποιήσεις, Έλεγχοι, Headers, Επόμενες εκτελέσεις</strong> σε ξεχωριστά φύλλα</li>
       <li>Οι τιμές των secrets εμφανίζονται ως ••••••</li>
     </ul>
+    <div class="form-grid">
+      <label class="field">Οργανισμός
+        <select class="select" name="tenant" data-rep-tenant>
+          <option value="">Όλοι οι οργανισμοί (<?= count($tenants) ?>)</option>
+          <?php foreach ($tenants as $t): ?><option value="<?= (int) $t['id'] ?>"><?= e($t['name']) ?> · <?= (int) $t['jobs'] ?> jobs</option><?php endforeach; ?>
+        </select>
+      </label>
+      <label class="field" data-rep-layout>Μορφή
+        <select class="select" name="layout">
+          <option value="one">Ένα αρχείο</option>
+          <option value="zip">Ένα ανά οργανισμό (ZIP)</option>
+        </select>
+      </label>
+    </div>
     <div class="form-actions"><button class="btn btn-primary" type="submit"><?= icon('download', 16) ?>Λήψη Excel</button></div>
   </form>
 </div>
@@ -193,6 +207,9 @@ $totJobs = array_sum(array_column($tenants, 'jobs'));
   const auto = document.querySelector('[data-bk-auto]');
   const weekly = document.querySelector('[data-bk-weekly]');
   auto && auto.addEventListener('change', () => { weekly.hidden = auto.value !== 'weekly'; });
+  const repTenant = document.querySelector('[data-rep-tenant]');
+  const repLayout = document.querySelector('[data-rep-layout]');
+  repTenant && repTenant.addEventListener('change', () => { repLayout.hidden = repTenant.value !== ''; });
   const form = document.getElementById('restore');
   const stored = form.querySelector('[data-bk-stored]');
   const note = form.querySelector('[data-bk-stored-note]');

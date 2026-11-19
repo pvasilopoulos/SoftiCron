@@ -67,8 +67,20 @@ final class PlatformBackupController extends Controller
         $this->superAdmin();
         Session::release();
         @set_time_limit(300);
-        [$name, $data, $mime] = Backup::platformReport();
-        Audit::log('job.exported', 'platform', null, 'Αναλυτική αναφορά Excel όλων των οργανισμών', null, null, null);
+        $tenantId = (int) $this->req->query('tenant', 0);
+        if ($tenantId) {
+            // One tenant: the same report the tenant gets from its own Backup page.
+            $tenant = $this->db->one('SELECT * FROM tenants WHERE id = ?', [$tenantId]) ?? throw HttpException::notFound('Ο οργανισμός δεν βρέθηκε.');
+            [$name, $data, $mime] = Backup::report($tenant);
+            $what = 'του οργανισμού ' . $tenant['name'];
+        } elseif ($this->req->query('layout') === 'zip') {
+            [$name, $data, $mime] = Backup::platformReportZip();
+            $what = 'όλων των οργανισμών (ένα αρχείο ανά οργανισμό)';
+        } else {
+            [$name, $data, $mime] = Backup::platformReport();
+            $what = 'όλων των οργανισμών';
+        }
+        Audit::log('job.exported', 'platform', null, 'Αναλυτική αναφορά Excel ' . $what, null, null, $tenantId ?: null);
         return $this->file($name, $data, $mime);
     }
 
