@@ -125,9 +125,10 @@ abstract class Controller
     }
 
     /** @return array{rows: array, total: int, page: int, pages: int} */
-    protected function paginate(string $sqlFromWhere, array $params, string $select, string $order, int $perPage = 25): array
+    /** $total: pass it when already known, to skip the COUNT(*) query. */
+    protected function paginate(string $sqlFromWhere, array $params, string $select, string $order, int $perPage = 25, ?int $total = null): array
     {
-        $total = (int) $this->db->value("SELECT COUNT(*) $sqlFromWhere", $params);
+        $total ??= (int) $this->db->value("SELECT COUNT(*) $sqlFromWhere", $params);
         $pages = max(1, (int) ceil($total / $perPage));
         $page = min($this->page(), $pages);
         $offset = ($page - 1) * $perPage;

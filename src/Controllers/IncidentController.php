@@ -33,8 +33,8 @@ final class IncidentController extends Controller
     {
         $job = $this->fromLink($id, $token);
         $tenant = $this->db->one('SELECT name, timezone FROM tenants WHERE id = ?', [$job['tenant_id']]);
-        $lastRun = $job['failing_since'] ? $this->db->one("SELECT id, error, http_status, COALESCE(started_at, scheduled_at) AS t FROM job_runs WHERE job_id = ? AND status = 'failed' ORDER BY id DESC LIMIT 1", [$id]) : null;
-        $fails = $job['failing_since'] ? (int) $this->db->value("SELECT COUNT(*) FROM job_runs WHERE job_id = ? AND status = 'failed' AND COALESCE(started_at, scheduled_at) >= ?", [$id, $job['failing_since']]) : 0;
+        $lastRun = $job['failing_since'] ? $this->db->one("SELECT id, error, http_status, run_at AS t FROM job_runs WHERE job_id = ? AND status = 'failed' ORDER BY id DESC LIMIT 1", [$id]) : null;
+        $fails = $job['failing_since'] ? (int) $this->db->value("SELECT COUNT(*) FROM job_runs WHERE job_id = ? AND status = 'failed' AND run_at >= ?", [$id, $job['failing_since']]) : 0;
         $user = Auth::check() ? Auth::user() : null;
         return $this->view('incidents/ack', [
             'title' => 'Ανάληψη συμβάντος', 'job' => $job, 'tenant' => $tenant, 'token' => $token, 'lastRun' => $lastRun, 'fails' => $fails,

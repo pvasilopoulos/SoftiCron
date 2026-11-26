@@ -31,13 +31,13 @@ final class Reports
         $tot = ['runs' => 0, 'ok' => 0, 'failed' => 0, 'down' => 0, 'span' => 0, 'sla_total' => 0, 'sla_met' => 0];
         foreach ($jobs as $j) {
             $runs = $db->all(
-                "SELECT status, duration_ms, COALESCE(started_at, scheduled_at) AS t FROM job_runs
-                 WHERE job_id = ? AND status IN ('success','failed') AND COALESCE(started_at, scheduled_at) BETWEEN ? AND ? ORDER BY t, id",
+                "SELECT status, duration_ms, UNIX_TIMESTAMP(run_at) AS t FROM job_runs
+                 WHERE job_id = ? AND status IN ('success','failed') AND run_at BETWEEN ? AND ? ORDER BY run_at, id",
                 [$j['id'], $from, $to],
             );
             // State just before the period, to know whether we start "down".
             $before = $db->value(
-                "SELECT status FROM job_runs WHERE job_id = ? AND status IN ('success','failed') AND COALESCE(started_at, scheduled_at) < ? ORDER BY id DESC LIMIT 1",
+                "SELECT status FROM job_runs WHERE job_id = ? AND status IN ('success','failed') AND run_at < ? ORDER BY run_at DESC LIMIT 1",
                 [$j['id'], $from],
             );
             $start = max($fromTs, strtotime($j['created_at'] . ' UTC'));
@@ -47,7 +47,7 @@ final class Reports
             $durations = [];
             $ok = $failed = 0;
             foreach ($runs as $r) {
-                $t = strtotime($r['t'] . ' UTC');
+                $t = (int) $r['t'];
                 if ($r['status'] === 'failed') {
                     $failed++;
                     $downSince ??= $t;
@@ -108,10 +108,16 @@ final class Reports
         $ids = array_column($out, 'id');
         if ($ids) {
             $in = implode(',', $ids);
-            foreach ($db->all("SELECT COALESCE(started_at, scheduled_at) AS t, status FROM job_runs WHERE job_id IN ($in) AND status IN ('success','failed') AND COALESCE(started_at, scheduled_at) BETWEEN ? AND ?", [$from, $to]) as $r) {
-                $d = (new \DateTimeImmutable($r['t'], new \DateTimeZone('UTC')))->setTimezone($tz)->format('Y-m-d');
+            // Counted per UTC hour in SQL (index only), then mapped to the tenant's local day.
+            foreach ($db->all(
+                "SELECT DATE_FORMAT(run_at, '%Y-%m-%d %H:00:00') AS h, SUM(status = 'success') AS ok, SUM(status = 'failed') AS failed
+                 FROM job_runs WHERE job_id IN ($in) AND status IN ('success','failed') AND run_at BETWEEN ? AND ? GROUP BY h",
+                [$from, $to],
+            ) as $r) {
+                $d = (new \DateTimeImmutable($r['h'], new \DateTimeZone('UTC')))->setTimezone($tz)->format('Y-m-d');
                 $daily[$d] ??= ['ok' => 0, 'failed' => 0];
-                $daily[$d][$r['status'] === 'success' ? 'ok' : 'failed']++;
+                $daily[$d]['ok'] += (int) $r['ok'];
+                $daily[$d]['failed'] += (int) $r['failed'];
             }
         }
         $days = [];

@@ -57,9 +57,9 @@ final class StatusPage
             $in = implode(',', $ids);
             $since = gmdate('Y-m-d H:i:s', time() - self::DAYS * 86400);
             foreach ($db->all(
-                "SELECT job_id, DATE(COALESCE(started_at, scheduled_at) + INTERVAL $offset SECOND) AS d,
+                "SELECT job_id, DATE(run_at + INTERVAL $offset SECOND) AS d,
                         SUM(status = 'success') AS ok, SUM(status = 'failed') AS failed, AVG(CASE WHEN status = 'success' THEN duration_ms END) AS avg_ms
-                 FROM job_runs WHERE job_id IN ($in) AND status IN ('success','failed') AND COALESCE(started_at, scheduled_at) >= ?
+                 FROM job_runs WHERE job_id IN ($in) AND status IN ('success','failed') AND run_at >= ?
                  GROUP BY job_id, d",
                 [$since],
             ) as $r) {
@@ -126,8 +126,8 @@ final class StatusPage
         foreach ($jobs as $j) {
             $threshold = max(1, (int) ($j['notify_after_failures'] ?? 1));
             $runs = $db->all(
-                "SELECT status, COALESCE(started_at, scheduled_at) AS t FROM job_runs
-                 WHERE job_id = ? AND status IN ('success','failed') AND COALESCE(started_at, scheduled_at) >= ? ORDER BY t, id",
+                "SELECT status, run_at AS t FROM job_runs
+                 WHERE job_id = ? AND status IN ('success','failed') AND run_at >= ? ORDER BY t, id",
                 [$j['id'], $since],
             );
             $start = null;

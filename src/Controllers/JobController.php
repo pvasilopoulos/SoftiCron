@@ -91,14 +91,12 @@ final class JobController extends Controller
         $ids = array_map('intval', array_column($page['rows'], 'id'));
         if ($ids) {
             $in = implode(',', $ids);
-            foreach ($this->db->all(
-                "SELECT job_id, id, status, duration_ms, is_slow, http_status, t FROM (
-                   SELECT job_id, id, status, duration_ms, is_slow, http_status, COALESCE(started_at, scheduled_at) AS t,
-                          ROW_NUMBER() OVER (PARTITION BY job_id ORDER BY id DESC) AS rn
-                   FROM job_runs WHERE job_id IN ($in) AND status IN ('success','failed','missed','skipped','running','retrying')
-                     AND created_at >= UTC_TIMESTAMP() - INTERVAL 30 DAY
-                 ) x WHERE rn <= 20 ORDER BY job_id, id",
-            ) as $r) {
+            // Last 20 runs per job, each read backwards from the (job_id, run_at, ...) covering index.
+            $parts = array_map(fn (int $id) => "(SELECT job_id, id, status, duration_ms, is_slow, http_status, run_at AS t FROM job_runs
+                 WHERE job_id = $id AND run_at >= UTC_TIMESTAMP() - INTERVAL 30 DAY
+                   AND status IN ('success','failed','missed','skipped','running','retrying')
+                 ORDER BY run_at DESC LIMIT 20)", $ids);
+            foreach ($this->db->all(implode(' UNION ALL ', $parts) . ' ORDER BY job_id, t, id') as $r) {
                 $recent[(int) $r['job_id']][] = $r;
             }
             foreach ($this->db->all(

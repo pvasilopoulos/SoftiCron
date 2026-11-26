@@ -503,7 +503,7 @@ final class Backup
         $stats = [];
         foreach ($db->all(
             "SELECT job_id, COUNT(*) AS runs, SUM(status = 'success') AS ok, SUM(status = 'failed') AS failed, AVG(duration_ms) AS avg_ms, MAX(duration_ms) AS max_ms
-             FROM job_runs WHERE tenant_id = ? AND status IN ('success','failed') AND COALESCE(started_at, scheduled_at) >= UTC_TIMESTAMP() - INTERVAL 30 DAY
+             FROM job_runs WHERE tenant_id = ? AND status IN ('success','failed') AND run_at >= UTC_TIMESTAMP() - INTERVAL 30 DAY
              GROUP BY job_id",
             [$tid],
         ) as $s) {

@@ -97,20 +97,27 @@ final class RunController extends Controller
         $this->authorize('runs.view');
         $tid = $this->tenantId();
         [$where, $p, $f] = $this->filters();
+        // Counts per status and the longest duration in one pass over the covering index; the jobs
+        // table is joined only when a filter needs it (group, search).
+        $countWhere = $f['group'] === '' && $f['q'] === '' ? str_replace(' JOIN jobs j ON j.id = r.job_id', '', $where) : $where;
+        $whereNoStatus = preg_replace('/ AND r\.status = :status/', '', $countWhere);
+        $pNoStatus = $p;
+        unset($pNoStatus['status']);
+        $counts = $maxByStatus = [];
+        foreach ($this->db->all("SELECT r.status, COUNT(*) AS n, MAX(r.duration_ms) AS mx $whereNoStatus GROUP BY r.status", $pNoStatus) as $c) {
+            $counts[$c['status']] = (int) $c['n'];
+            $maxByStatus[$c['status']] = (int) $c['mx'];
+        }
+        $total = $f['status'] !== '' ? ($counts[$f['status']] ?? 0) : array_sum($counts);
+        $maxDur = $maxByStatus ? max($maxByStatus) : 0; // bar scale: longest run among all statuses, as before
         $page = $this->paginate(
             $where,
             $p,
             'r.id, r.status, r.http_status, r.duration_ms, r.is_slow, r.attempts, r.trigger_type, r.scheduled_at, r.started_at, r.created_at, r.error, r.request_url, j.id AS job_id, j.name AS job_name, j.method, j.group_name, j.max_retries',
             'r.id DESC',
             40,
+            $total,
         );
-        // Counts per status for the same filters (except status) → quick status chips.
-        $fNoStatus = $f;
-        $whereNoStatus = preg_replace('/ AND r\.status = :status/', '', $where);
-        $pNoStatus = $p;
-        unset($pNoStatus['status']);
-        $counts = array_column($this->db->all("SELECT r.status, COUNT(*) AS n $whereNoStatus GROUP BY r.status", $pNoStatus), 'n', 'status');
-        $maxDur = (int) $this->db->value("SELECT MAX(r.duration_ms) $whereNoStatus", $pNoStatus);
         $jobs = $this->db->all('SELECT id, name FROM jobs WHERE tenant_id = ? ORDER BY name', [$tid]);
         $groups = $this->db->column('SELECT DISTINCT group_name FROM jobs WHERE tenant_id = ? AND group_name IS NOT NULL ORDER BY group_name', [$tid]);
         return $this->view('runs/index', [

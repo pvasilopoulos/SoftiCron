@@ -61,9 +61,9 @@ final class CalendarController extends Controller
         if ($jobIds) {
             $in = implode(',', $jobIds);
             foreach ($this->db->all(
-                "SELECT DATE(COALESCE(started_at, scheduled_at) + INTERVAL $offset SECOND) AS d,
+                "SELECT DATE(run_at + INTERVAL $offset SECOND) AS d,
                         SUM(status = 'success') AS ok, SUM(status = 'failed') AS failed, SUM(status IN ('missed','skipped')) AS other
-                 FROM job_runs WHERE job_id IN ($in) AND COALESCE(started_at, scheduled_at) >= ? AND COALESCE(started_at, scheduled_at) < ?
+                 FROM job_runs WHERE job_id IN ($in) AND run_at >= ? AND run_at < ?
                  GROUP BY d",
                 [$this->utc($first), $this->utc($next)],
             ) as $r) {
@@ -108,8 +108,8 @@ final class CalendarController extends Controller
         if ($jobIds) {
             $in = implode(',', $jobIds);
             foreach ($this->db->all(
-                "SELECT id, job_id, status, is_slow, http_status, duration_ms, COALESCE(started_at, scheduled_at) AS t FROM job_runs
-                 WHERE job_id IN ($in) AND COALESCE(started_at, scheduled_at) >= ? AND COALESCE(started_at, scheduled_at) < ?
+                "SELECT id, job_id, status, is_slow, http_status, duration_ms, run_at AS t FROM job_runs
+                 WHERE job_id IN ($in) AND run_at >= ? AND run_at < ?
                  ORDER BY t LIMIT 5000",
                 [$this->utc($dStart), $this->utc($dEnd)],
             ) as $r) {
@@ -160,6 +160,40 @@ final class CalendarController extends Controller
         if (!CronHelper::isValid((string) $job['cron_expr'])) {
             return [[], false];
         }
+        // Computing up to CAP cron occurrences per job is the slow part of this page: the result is
+        // cached for 5 minutes, computed from the start of the 5-minute slot and trimmed to $from.
+        $slot = intdiv($from->getTimestamp(), 300) * 300;
+        $key = md5(json_encode([$job['cron_expr'], $job['timezone'], $job['active_from'], $job['active_until'], $slot, $to->getTimestamp(), self::CAP]));
+        $dir = \App\Core\App::storage('cache');
+        $file = $dir . '/cal-' . $key . '.json';
+        $cached = is_file($file) && filemtime($file) > time() - 300 ? json_decode((string) @file_get_contents($file), true) : null;
+        if (!is_array($cached)) {
+            [$times, $capped] = $this->computeOccurrences($job, (new DateTimeImmutable('@' . $slot)), $to);
+            $cached = [array_map(fn ($t) => $t->getTimestamp(), $times), $capped];
+            if (is_dir($dir) || @mkdir($dir, 0775, true)) {
+                @file_put_contents($file, json_encode($cached), LOCK_EX);
+                if (random_int(1, 50) === 1) {
+                    foreach (glob($dir . '/cal-*.json') ?: [] as $old) {
+                        if (filemtime($old) < time() - 3600) {
+                            @unlink($old);
+                        }
+                    }
+                }
+            }
+        }
+        $fromTs = $from->getTimestamp();
+        $utc = new DateTimeZone('UTC');
+        $times = [];
+        foreach ($cached[0] as $ts) {
+            if ($ts >= $fromTs) {
+                $times[] = (new DateTimeImmutable('@' . $ts))->setTimezone($utc);
+            }
+        }
+        return [$times, (bool) $cached[1]];
+    }
+
+    private function computeOccurrences(array $job, DateTimeImmutable $from, DateTimeImmutable $to): array
+    {
         $out = [];
         $cursor = $from->setTimezone(new DateTimeZone('UTC'))->modify('-1 second');
         $tz = $job['timezone'] ?: 'Europe/Athens';
