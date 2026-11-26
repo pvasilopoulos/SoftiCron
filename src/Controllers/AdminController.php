@@ -177,7 +177,14 @@ final class AdminController extends Controller
             'ping_last' => (string) Settings::get(0, 'watchdog.ping_last', ''),
             'alert_at' => (string) Settings::get(0, 'watchdog.alert_at', ''),
         ];
-        return $this->view('admin/system', ['title' => 'Κατάσταση συστήματος', 'nav' => 'system', 'checks' => $checks, 'queue' => $queue, 'watch' => $watch], Auth::tenant() ? 'layout' : 'auth_layout');
+        $usage = \App\Services\Retention::usage();
+        $storage = [];
+        foreach ($this->db->all('SELECT * FROM tenants ORDER BY name') as $t) {
+            $u = $usage[(int) $t['id']] ?? ['runs' => 0, 'notifications' => 0, 'audit' => 0, 'bytes' => 0, 'oldest' => null];
+            $storage[] = $u + ['id' => (int) $t['id'], 'name' => $t['name'], 'policy' => \App\Services\Retention::policy($t)];
+        }
+        usort($storage, fn ($x, $y) => $y['bytes'] <=> $x['bytes']);
+        return $this->view('admin/system', ['title' => 'Κατάσταση συστήματος', 'nav' => 'system', 'checks' => $checks, 'queue' => $queue, 'watch' => $watch, 'storage' => $storage], Auth::tenant() ? 'layout' : 'auth_layout');
     }
 
     public function watchdogSave(): Response

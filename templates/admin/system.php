@@ -15,6 +15,28 @@
     </tbody>
   </table>
 </section>
+
+<?php if (!empty($storage)): $num = fn (int $n) => number_format($n, 0, ',', '.'); ?>
+<section class="card flush" id="storage">
+  <div class="card-head" style="padding:16px 18px 0"><h2>Ιστορικό & χώρος ανά οργανισμό</h2><span class="small muted">Χώρος κατά προσέγγιση, από τα στατιστικά της βάσης</span></div>
+  <table class="table rtable">
+    <thead><tr><th>Οργανισμός</th><th class="num">Εκτελέσεις</th><th class="num">Ειδοποιήσεις</th><th class="num">Audit</th><th class="num">Χώρος</th><th>Διατήρηση (εκτελ. / απαντ. / όριο)</th><th>Παλαιότερη</th></tr></thead>
+    <tbody>
+      <?php foreach ($storage as $s): ?>
+        <tr>
+          <td class="primary"><a href="<?= e(url('admin/tenants/' . $s['id'] . '/edit')) ?>"><strong><?= e($s['name']) ?></strong></a></td>
+          <td data-label="Εκτελέσεις" class="num"><?= e($num((int) $s['runs'])) ?></td>
+          <td data-label="Ειδοποιήσεις" class="num"><?= e($num((int) $s['notifications'])) ?></td>
+          <td data-label="Audit" class="num"><?= e($num((int) $s['audit'])) ?></td>
+          <td data-label="Χώρος" class="num"><?= e(App\Services\Retention::mb((int) $s['bytes'])) ?></td>
+          <td data-label="Διατήρηση" class="small"><?= (int) $s['policy']['runs'] ?> / <?= (int) $s['policy']['bodies'] ?> / <?= (int) $s['policy']['max'] ?> ημ.</td>
+          <td data-label="Παλαιότερη" class="small"><?= $s['oldest'] ? e(fmt_dt($s['oldest'], 'Europe/Athens', 'd/m/Y')) : '—' ?></td>
+        </tr>
+      <?php endforeach; ?>
+    </tbody>
+  </table>
+</section>
+<?php endif; ?>
 <section class="card stack">
   <div class="row between">
     <div class="stack-sm" style="gap:2px"><h2>Επιτήρηση scheduler</h2><span class="small muted">Για να μάθεις αμέσως αν σταματήσει το <code>bin/cron.php</code>.</span></div>

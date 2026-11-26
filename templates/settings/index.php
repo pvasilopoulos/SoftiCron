@@ -67,7 +67,7 @@ $cMenu = Auth::can('settings.menu');
     <div class="kv">
       <div><span class="k">Μέγιστα jobs</span><span class="v"><?= (int) $tenant['max_jobs'] ?></span></div>
       <div><span class="k">Ελάχιστο διάστημα</span><span class="v"><?= (int) $tenant['min_interval_minutes'] ?> λεπτά</span></div>
-      <div><span class="k">Διατήρηση logs</span><span class="v"><?= (int) $tenant['log_retention_days'] ?> ημέρες</span></div>
+      <div><span class="k">Μέγιστη διατήρηση ιστορικού</span><span class="v"><?= (int) $tenant['log_retention_days'] ?> ημέρες</span></div>
     </div>
     <div class="form-actions"><button class="btn btn-primary" type="submit">Αποθήκευση</button></div>
   </form>
@@ -148,6 +148,96 @@ $items = App\Services\BottomNav::ITEMS;
   </template>
 </form>
 <?php endif; ?>
+
+<?php if ($retention):
+$pol = $retention['policy'];
+$use = $retention['usage'];
+$num = fn (int $n) => number_format($n, 0, ',', '.');
+?>
+<form id="retention" method="post" action="<?= e(url('settings/retention')) ?>" class="card stack" data-retention data-preview="<?= e(url('settings/retention/preview')) ?>">
+  <?= csrf_field() ?>
+  <div>
+    <h2>Διατήρηση ιστορικού</h2>
+    <p class="small muted" style="margin-top:4px">Πόσες μέρες κρατιέται κάθε είδος ιστορικού. Το όριο του πλάνου σου είναι <strong><?= (int) $pol['max'] ?> ημέρες</strong>. Ο καθαρισμός γίνεται αυτόματα μία φορά τη μέρα, σε μικρές παρτίδες.</p>
+  </div>
+  <div class="form-grid ret-grid">
+    <label class="field">Εκτελέσεις
+      <input class="input" type="number" name="runs" min="1" max="<?= (int) $pol['max'] ?>" value="<?= (int) $pol['runs'] ?>" required data-ret="runs">
+      <span class="help">Κατάσταση, χρόνοι, σφάλματα. Από αυτές βγαίνουν uptime, SLA, αναφορές και ημερολόγιο. Έως <?= (int) $pol['max'] ?>.</span>
+    </label>
+    <label class="field">Απαντήσεις (body & headers)
+      <input class="input" type="number" name="bodies" min="1" max="<?= (int) $pol['max'] ?>" value="<?= (int) $pol['bodies'] ?>" required data-ret="bodies">
+      <span class="help">Πιάνουν τον περισσότερο χώρο. Μετά από αυτές τις μέρες η εκτέλεση μένει, χωρίς το κείμενο της απάντησης. Έως όσο οι εκτελέσεις.</span>
+    </label>
+    <label class="field">Ιστορικό ειδοποιήσεων
+      <input class="input" type="number" name="notifications" min="1" max="<?= (int) $pol['max'] ?>" value="<?= (int) $pol['notifications'] ?>" required data-ret="notifications">
+      <span class="help">Ποιες ειδοποιήσεις στάλθηκαν, σε ποιον, με τι αποτέλεσμα. Έως <?= (int) $pol['max'] ?>.</span>
+    </label>
+    <label class="field">Audit log
+      <input class="input" type="number" name="audit" min="<?= App\Services\Retention::AUDIT_MIN ?>" max="<?= App\Services\Retention::AUDIT_MAX ?>" value="<?= (int) $pol['audit'] ?>" required data-ret="audit">
+      <span class="help">Ποιος άλλαξε τι. <?= App\Services\Retention::AUDIT_MIN ?>–<?= App\Services\Retention::AUDIT_MAX ?> ημέρες.</span>
+    </label>
+  </div>
+  <div class="ret-preview" data-ret-preview hidden></div>
+
+  <div class="kv ret-usage">
+    <div><span class="k">Εκτελέσεις τώρα</span><span class="v"><?= e($num((int) $use['runs'])) ?></span></div>
+    <div><span class="k">Ειδοποιήσεις</span><span class="v"><?= e($num((int) $use['notifications'])) ?></span></div>
+    <div><span class="k">Audit log</span><span class="v"><?= e($num((int) $use['audit'])) ?></span></div>
+    <div><span class="k">Χώρος (περίπου)</span><span class="v"><?= e(App\Services\Retention::mb((int) $use['bytes'])) ?></span></div>
+    <div><span class="k">Παλαιότερη εκτέλεση</span><span class="v"><?= $use['oldest'] ? e(fmt_dt($use['oldest'], $tenant['timezone'], 'd/m/Y')) : '—' ?></span></div>
+  </div>
+
+  <?php if ($retention['overrides']): ?>
+    <div class="stack-sm">
+      <span class="small" style="font-weight:600">Jobs με δική τους διατήρηση εκτελέσεων</span>
+      <div class="chips">
+        <?php foreach ($retention['overrides'] as $j): ?>
+          <a class="chip" href="<?= e(url('jobs/' . $j['id'] . '/edit')) ?>#retention"><?= e($j['name']) ?> · <?= (int) min($pol['max'], (int) $j['retention_days']) ?> ημ.</a>
+        <?php endforeach; ?>
+      </div>
+    </div>
+  <?php else: ?>
+    <p class="xs muted">Ένα job μπορεί να έχει δική του διατήρηση (π.χ. ένα κρίσιμο job για έλεγχο), από τη φόρμα του job.</p>
+  <?php endif; ?>
+  <div class="form-actions"><button class="btn btn-primary" type="submit">Αποθήκευση διατήρησης</button></div>
+</form>
+<?php endif; ?>
+
+<script>
+(() => {
+  const f = document.querySelector('[data-retention]');
+  if (!f) return;
+  const box = f.querySelector('[data-ret-preview]');
+  const runs = f.querySelector('[data-ret=runs]');
+  const bodies = f.querySelector('[data-ret=bodies]');
+  const fmt = (n) => Number(n).toLocaleString('el-GR');
+  let t = null, seq = 0;
+  const check = async () => {
+    bodies.max = runs.value || runs.max;
+    const q = new URLSearchParams();
+    f.querySelectorAll('[data-ret]').forEach((i) => q.set(i.name, i.value));
+    const my = ++seq;
+    try {
+      const r = await fetch(f.dataset.preview + '?' + q, { headers: { Accept: 'application/json' }, credentials: 'same-origin' });
+      const j = await r.json();
+      if (my !== seq) return;
+      const d = j.remove || {};
+      const parts = [];
+      if (d.runs) parts.push(fmt(d.runs) + ' εκτελέσεις');
+      if (d.bodies) parts.push('οι απαντήσεις έως ' + fmt(d.bodies) + ' εκτελέσεων');
+      if (d.notifications) parts.push(fmt(d.notifications) + ' εγγραφές ειδοποιήσεων');
+      if (d.audit) parts.push(fmt(d.audit) + ' εγγραφές audit');
+      box.hidden = false;
+      box.className = 'ret-preview' + (parts.length ? ' warn' : '');
+      box.textContent = parts.length
+        ? 'Με αυτές τις τιμές, στον επόμενο καθαρισμό θα σβηστούν: ' + parts.join(' · ') + '.'
+        : 'Με αυτές τις τιμές δεν θα σβηστεί τίποτα από όσα υπάρχουν τώρα.';
+    } catch (e) { box.hidden = true; }
+  };
+  f.querySelectorAll('[data-ret]').forEach((i) => i.addEventListener('input', () => { clearTimeout(t); t = setTimeout(check, 400); }));
+})();
+</script>
 
 <script>
 document.addEventListener('DOMContentLoaded', () => {

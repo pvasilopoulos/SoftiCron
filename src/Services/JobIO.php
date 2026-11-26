@@ -19,10 +19,10 @@ final class JobIO
         'name', 'description', 'type', 'method', 'url', 'body_type', 'body', 'timezone', 'timeout_sec',
         'max_retries', 'retry_strategy', 'retry_delay_sec', 'overlap_policy', 'success_codes', 'success_contains',
         'slow_threshold_ms', 'active_from', 'active_until', 'notify_emails', 'notify_phones', 'notify_telegram_chat',
-        'grace_minutes', 'notify_after_failures', 'escalate_after_minutes', 'sla_target', 'status_name', 'push_target',
+        'grace_minutes', 'notify_after_failures', 'escalate_after_minutes', 'sla_target', 'status_name', 'push_target', 'retention_days',
     ];
 
-    private const INTS = ['timeout_sec', 'max_retries', 'retry_delay_sec', 'slow_threshold_ms', 'grace_minutes', 'notify_after_failures', 'escalate_after_minutes'];
+    private const INTS = ['timeout_sec', 'max_retries', 'retry_delay_sec', 'slow_threshold_ms', 'grace_minutes', 'notify_after_failures', 'escalate_after_minutes', 'retention_days'];
 
     public static function toArray(array $job, bool $withState = true): array
     {

@@ -10,21 +10,55 @@ use App\Core\HttpException;
 use App\Core\Response;
 use App\Services\Audit;
 use App\Services\CronHelper;
+use App\Services\Retention;
 use App\Services\Settings;
 use App\Services\Tenants;
 
 final class SettingsController extends Controller
 {
-    public const SETTINGS_PERMS = ['settings.manage', 'settings.notifications', 'settings.reports', 'settings.branding', 'settings.status_page', 'settings.menu'];
+    public const SETTINGS_PERMS = ['settings.manage', 'settings.notifications', 'settings.reports', 'settings.branding', 'settings.status_page', 'settings.menu', 'settings.retention'];
 
     public function index(): Response
     {
         $this->authorizeAny(self::SETTINGS_PERMS);
         $tenant = $this->tenant();
+        $retention = null;
+        if (Auth::can('settings.retention')) {
+            $tid = (int) $tenant['id'];
+            $retention = [
+                'policy' => Retention::policy($tenant),
+                'usage' => Retention::usage($tid)[$tid] ?? ['runs' => 0, 'notifications' => 0, 'audit' => 0, 'bytes' => 0, 'oldest' => null],
+                'overrides' => $this->db->all('SELECT id, name, retention_days FROM jobs WHERE tenant_id = ? AND retention_days IS NOT NULL ORDER BY name', [$tid]),
+            ];
+        }
         return $this->view('settings/index', [
             'title' => 'Ρυθμίσεις', 'nav' => 'settings', 'tenant' => $tenant,
-            'settings' => Settings::all((int) $tenant['id']),
+            'settings' => Settings::all((int) $tenant['id']), 'retention' => $retention,
         ]);
+    }
+
+    /** History retention (within the plan's maximum). */
+    public function retention(): Response
+    {
+        $this->authorize('settings.retention');
+        $tenant = $this->tenant();
+        $tid = (int) $tenant['id'];
+        $before = Retention::policy($tenant);
+        $after = Retention::fromInput($tenant, $_POST);
+        Retention::save($tid, $after);
+        unset($before['max'], $after['max']);
+        Audit::log('settings.updated', 'tenant', $tid, 'Διατήρηση ιστορικού', $before, $after);
+        $this->flash('success', 'Η διατήρηση ιστορικού αποθηκεύτηκε. Ο καθαρισμός γίνεται αυτόματα μέσα στις επόμενες 24 ώρες.');
+        return $this->redirect('settings#retention');
+    }
+
+    /** What the next cleanup would remove with the values typed in the form (JSON). */
+    public function retentionPreview(): Response
+    {
+        $this->authorize('settings.retention');
+        $tenant = $this->tenant();
+        $policy = Retention::fromInput($tenant, $_GET);
+        return $this->json(['policy' => $policy, 'remove' => Retention::preview($tenant, $policy)]);
     }
 
     /** Saves the sections of the main settings form that the user is allowed to change. */

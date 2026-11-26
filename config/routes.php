@@ -131,6 +131,8 @@ return static function (RouteCollector $r): void {
     $r->post('/settings/branding', [C\SettingsController::class, 'branding']);
     $r->post('/settings/menu', [C\SettingsController::class, 'menu']);
     $r->post('/settings/status', [C\SettingsController::class, 'status']);
+    $r->post('/settings/retention', [C\SettingsController::class, 'retention']);
+    $r->get('/settings/retention/preview', [C\SettingsController::class, 'retentionPreview']);
     $r->get('/branding/{id:\d+}/logo', [C\SettingsController::class, 'logo']);
     $r->get('/profile', [C\ProfileController::class, 'index']);
     $r->post('/profile', [C\ProfileController::class, 'update']);

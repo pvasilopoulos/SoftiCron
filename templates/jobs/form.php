@@ -282,6 +282,11 @@ curl -fsS --data-raw "$output" <?= e($pingBase) ?><?= '$( [ $code -ne 0 ] && ech
         </label>
       </div>
       <label class="check"><input type="checkbox" name="show_on_status" value="1" <?= $v('show_on_status') ? 'checked' : '' ?>>Εμφάνιση στη δημόσια σελίδα κατάστασης</label>
+      <?php $retPol = App\Services\Retention::policy(App\Auth\Auth::tenant()); ?>
+      <label class="field" id="retention" style="max-width:420px">Διατήρηση εκτελέσεων αυτού του job (ημέρες)
+        <input class="input" type="number" min="1" max="<?= (int) $retPol['max'] ?>" name="retention_days" value="<?= e($v('retention_days')) ?>" placeholder="Όπως ο οργανισμός (<?= (int) $retPol['runs'] ?>)">
+        <span class="help">Κενό = όπως ορίζεται στις Ρυθμίσεις. Π.χ. περισσότερες μέρες για ένα κρίσιμο job που θέλεις για έλεγχο. Έως <?= (int) $retPol['max'] ?> (όριο πλάνου).</span>
+      </label>
     </section>
 
     <section class="card stack <?= $jobType === 'heartbeat' ? 'hidden' : '' ?>" data-type-only="http">

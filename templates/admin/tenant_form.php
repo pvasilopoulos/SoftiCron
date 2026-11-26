@@ -28,7 +28,7 @@ $v = fn (string $k) => old($k, $t[$k] ?? '');
   <div class="form-grid">
     <label class="field">Μέγιστα jobs<input class="input" type="number" min="1" name="max_jobs" value="<?= e($v('max_jobs')) ?>"></label>
     <label class="field">Ελάχιστο διάστημα (λεπτά)<input class="input" type="number" min="1" name="min_interval_minutes" value="<?= e($v('min_interval_minutes')) ?>"></label>
-    <label class="field">Διατήρηση logs (ημέρες)<input class="input" type="number" min="1" name="log_retention_days" value="<?= e($v('log_retention_days')) ?>"></label>
+    <label class="field">Μέγιστη διατήρηση ιστορικού (ημέρες)<input class="input" type="number" min="1" max="3650" name="log_retention_days" value="<?= e($v('log_retention_days')) ?>"><span class="help">Ο οργανισμός ορίζει στις Ρυθμίσεις του πόσες μέρες κρατά (μέσα σε αυτό το όριο)</span></label>
   </div>
   <?php if ($isNew): ?>
     <label class="field">Email ιδιοκτήτη (Owner) <span class="help">Υπάρχων χρήστης προστίθεται αμέσως· νέος λαμβάνει πρόσκληση</span>

@@ -394,18 +394,17 @@ final class Scheduler
     private function maintenance(): void
     {
         $today = gmdate('Y-m-d');
+        // History retention (Retention): small batches, at most 10 s per tick, continued on the
+        // next ticks until done for the day.
+        if (Settings::get(0, 'retention.done') !== $today && Retention::run(microtime(true) + 10)) {
+            Settings::set(0, 'retention.done', $today);
+        }
         if (Settings::get(0, 'maintenance.last') === $today) {
             return;
         }
         Settings::set(0, 'maintenance.last', $today);
-        foreach ($this->db->all('SELECT id, log_retention_days FROM tenants') as $t) {
-            $cut = gmdate('Y-m-d H:i:s', time() - max(1, (int) $t['log_retention_days']) * 86400);
-            $this->db->exec("DELETE FROM job_runs WHERE tenant_id = ? AND created_at < ? AND status NOT IN ('queued','running','retrying')", [$t['id'], $cut]);
-            $this->db->exec('DELETE FROM notification_log WHERE tenant_id = ? AND created_at < ?', [$t['id'], $cut]);
-        }
         $this->db->exec('DELETE FROM login_attempts WHERE created_at < ?', [gmdate('Y-m-d H:i:s', time() - 30 * 86400)]);
         $this->db->exec('DELETE FROM invitations WHERE accepted_at IS NULL AND expires_at < ?', [gmdate('Y-m-d H:i:s', time() - 30 * 86400)]);
-        $this->db->exec('DELETE FROM audit_logs WHERE created_at < ?', [gmdate('Y-m-d H:i:s', time() - 365 * 86400)]);
         InAppFeed::cleanup();
     }
 

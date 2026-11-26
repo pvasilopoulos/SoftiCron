@@ -37,7 +37,7 @@ final class Backup
     /** Settings that describe the state of the installation, not the configuration: never backed up or restored. */
     private static function internalSetting(string $k): bool
     {
-        return str_starts_with($k, 'backup.') || str_ends_with($k, '_last') || str_ends_with($k, '.last');
+        return str_starts_with($k, 'backup.') || str_ends_with($k, '_last') || str_ends_with($k, '.last') || str_ends_with($k, '_cleared');
     }
 
     /**

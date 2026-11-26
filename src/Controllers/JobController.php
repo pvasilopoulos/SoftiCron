@@ -231,7 +231,7 @@ final class JobController extends Controller
         $tenant = $this->tenant();
         $job = [
             'id' => null, 'type' => $this->req->query('type') === 'heartbeat' ? 'heartbeat' : 'http', 'auth_type' => 'none', 'auth_enc' => null,
-            'grace_minutes' => 5, 'notify_after_failures' => 1, 'escalate_after_minutes' => '', 'escalate_channels' => '', 'sla_target' => '',
+            'grace_minutes' => 5, 'notify_after_failures' => 1, 'escalate_after_minutes' => '', 'escalate_channels' => '', 'sla_target' => '', 'retention_days' => '',
             'show_on_status' => 0, 'status_name' => '', 'ping_token' => null,
             'name' => '', 'group_name' => (string) $this->req->query('group', ''), 'description' => '', 'enabled' => 1, 'method' => 'GET', 'url' => 'https://',
             'body_type' => 'none', 'body' => '', 'cron_expr' => '*/5 * * * *', 'schedule_ui' => null,
@@ -530,6 +530,7 @@ final class JobController extends Controller
             'escalate_channels' => implode(',', array_intersect(array_keys(Notifier::CHANNELS), (array) ($_POST['escalate_channels'] ?? []))) ?: null,
             'sla_target' => is_numeric($r->input('sla_target')) && (float) $r->input('sla_target') > 0 ? min(100, max(1, round((float) $r->input('sla_target'), 2))) : null,
             'show_on_status' => $r->input('show_on_status') ? 1 : 0,
+            'retention_days' => (int) $r->input('retention_days', 0) > 0 ? min((int) $tenant['log_retention_days'], (int) $r->input('retention_days')) : null,
             'status_name' => mb_substr((string) $r->input('status_name', ''), 0, 100) ?: null,
         ];
         // Push recipients: only members of this tenant and their own devices are accepted.
@@ -635,7 +636,7 @@ final class JobController extends Controller
 
     public function auditable(array $job): array
     {
-        $out = array_intersect_key($job, array_flip(['name', 'group_name', 'notify_phones', 'enabled', 'method', 'url', 'body_type', 'cron_expr', 'timezone', 'timeout_sec', 'max_retries', 'overlap_policy', 'success_codes', 'active_from', 'active_until', 'notify_emails']));
+        $out = array_intersect_key($job, array_flip(['name', 'group_name', 'notify_phones', 'enabled', 'method', 'url', 'body_type', 'cron_expr', 'timezone', 'timeout_sec', 'max_retries', 'overlap_policy', 'success_codes', 'active_from', 'active_until', 'notify_emails', 'retention_days']));
         $out['headers'] = array_map(fn ($h) => $h['name'] . ': ' . (!empty($h['secret']) ? '••••' : $h['value']), HttpExecutor::headers($job));
         $out['auth_type'] = $job['auth_type'] ?? 'none';
         return $out;
